@@ -26,6 +26,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os/exec"
 	"strings"
@@ -39,7 +40,7 @@ func main() {
 		log.Fatal(err.Error())
 	}
 	p := ipp.NewParser(strings.NewReader(string(o)))
-	for l, err := p.Parse(); err != ipp.ErrEOF; l, err = p.Parse() {
+	for l, err := p.Parse(); err != io.EOF; l, err = p.Parse() {
 		if err != nil {
 			fmt.Println(err.Error())
 		} else {

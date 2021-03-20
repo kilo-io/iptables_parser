@@ -42,8 +42,7 @@ func (p *Parser) parseMatch(ms *[]Match) (state, error) {
 func (p *Parser) parseUdp(f *map[string]Flag) (state, error) {
 	s := sStart
 	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF; tok, lit = p.scanIgnoreWhitespace() {
-		nextValue := false
-		for !nextValue {
+		for nextValue := false; !nextValue; {
 			nextValue = true
 			switch s {
 			case sStart:
@@ -108,8 +107,8 @@ func (p *Parser) parseUdp(f *map[string]Flag) (state, error) {
 func (p *Parser) parseAddrtype(f *map[string]Flag) (state, error) {
 	s := sStart
 	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF; tok, lit = p.scanIgnoreWhitespace() {
-		nextValue := false
-		for !nextValue {
+
+		for nextValue := false; !nextValue; {
 			nextValue = true
 			switch s {
 			case sStart:
@@ -187,11 +186,11 @@ func (p *Parser) parseAddrtype(f *map[string]Flag) (state, error) {
 	}
 	return sStart, nil
 }
+
 func (p *Parser) parseTcp(f *map[string]Flag) (state, error) {
 	s := sStart
 	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF; tok, lit = p.scanIgnoreWhitespace() {
-		nextValue := false
-		for !nextValue {
+		for nextValue := false; !nextValue; {
 			nextValue = true
 			switch s {
 			case sStart:

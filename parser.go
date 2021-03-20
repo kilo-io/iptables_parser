@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,16 +15,26 @@ import (
 
 // Line represents a line in a iptables dump, e.g. generated with iptables-save.
 // It is either Comment, Header, Default or Rule.
-type Line interface{}
+type Line interface {
+	String() string
+}
 
 // Comment represents a comment in an iptables dump. Comments start with #.
 type Comment struct {
 	Content string
 }
 
+func (c Comment) String() string {
+	return "#" + c.Content
+}
+
 // Header represents a header in an iptables dump and introduce a new table. They start with *.
 type Header struct {
 	Content string
+}
+
+func (h Header) String() string {
+	return "*" + h.Content
 }
 
 // Default represents a default rule. They start with :.
@@ -33,35 +44,132 @@ type Default struct {
 	Counter Counter
 }
 
+func (d Default) String() string {
+	return fmt.Sprintf(":%s %s %s", d.Chain, d.Action, d.Counter.String())
+}
+
 // Rule represents a rule in an iptables dump. Normally the start with -A.
 // The parser treats the -A flag like any other flag, thus does not require
 // the -A flag as the leading flag.
 type Rule struct {
-	Chain   string
-	src     DNSOrIPPair
-	dest    DNSOrIPPair
-	comment string
-	// Be aware that the protocol names can be different depending on your system.
-	Protocol  StringPair
-	IPv4      bool
-	IPv6      bool
-	Jump      Target
-	Goto      Target
-	InInterf  StringPair
-	OutInterf StringPair
-	outInterf string
-	Fragment  BoolPair
-	counter   Counter
-	// Matches need to be a slice because order can matter. See man iptables-extension.
-	Matches []Match
+	Chain       string       // Name of the chain
+	Source      *DNSOrIPPair // Will be nil, if -s flag was not set.
+	Destination *DNSOrIPPair // Will be nil, if -s flag was not set.
+	InInterf    *StringPair  // Will be nil, if -i flag was not set.
+	OutInterf   *StringPair  // Will be nil, if -o flag was not set.
+	Protocol    *StringPair  // Be aware that the protocol names can be different depending on your system.
+	Fragment    *bool        // Will be nil, if flag was not set.
+	IPv4        bool         // False, if flag was not set.
+	IPv6        bool         // False, if flag was not set.
+	Jump        *Target      // Will be nil, if -j flag was not set.
+	Goto        *Target      // Will be nil, if -g flag was not set.
+	Counter     *Counter     // Will be nil, if no counter was parsed.
+	Matches     []Match      // Matches need to be a slice because order can matter. See man iptables-extension.
+}
+
+// NewRuleFromSpec returns a rule from a given rulespec and chain name.
+// It will return nil and an error, if the rulespec does not resemble
+// a valid rule, or contains unknown, or not implemented extensions.
+func NewRuleFromSpec(chain string, rulespec ...string) (*Rule, error) {
+	return NewRuleFromString(fmt.Sprintf("-A %s %s", chain, strings.Join(rulespec, " ")))
+}
+
+// NewRuleFromString returns a rule for the given string. It can only handle
+// appended rules with the "-A <chain name>" flag.
+// It will return nil and an error, if the given string does not resemble
+// a valid rule, or contains unknown, or not implemented extensions.
+func NewRuleFromString(s string) (*Rule, error) {
+	return NewParser(strings.NewReader(s)).ParseRule()
+}
+
+// String returns the rule as a String, similar to how iptables-save prints the rules
+// Note: Don't use this functions to compare rules because the order of flags can be
+// different and different flags can have equal meanings.
+func (r Rule) String() (s string) {
+	s = fmt.Sprintf("-A %s %s", r.Chain, strings.Join(enquoteIfWS(r.Spec()), " "))
+	if r.Counter != nil {
+		s = fmt.Sprintf("%s %s", r.Counter.String(), s)
+	}
+	return
+}
+
+// Spec returns the rule specifications of the rule.
+// The rulespec does not contain the chain name.
+// Different rule specs can descibe the same rule, so
+// don't use the rulespec to compare rules.
+// The rule spec can be used to append, insert or delete
+// rules with coreos' go-iptables module.
+func (r Rule) Spec() (ret []string) {
+	if r.Source != nil {
+		ret = append(ret, r.Source.Spec("-s")...)
+	}
+	if r.Destination != nil {
+		ret = append(ret, r.Destination.Spec("-d")...)
+	}
+	if r.InInterf != nil {
+		ret = append(ret, r.InInterf.Spec("-i")...)
+	}
+	if r.OutInterf != nil {
+		ret = append(ret, r.OutInterf.Spec("-o")...)
+	}
+	if r.Protocol != nil {
+		ret = append(ret, r.Protocol.Spec("-p")...)
+	}
+	if r.Fragment != nil {
+		if *r.Fragment {
+			ret = append(ret, "-f")
+		} else {
+			ret = append(ret, "!", "-f")
+		}
+
+	}
+	if r.IPv4 {
+		ret = append(ret, "-4")
+	}
+	if r.IPv6 {
+		ret = append(ret, "-6")
+	}
+	if len(r.Matches) > 0 {
+		for _, m := range r.Matches {
+
+			ret = append(ret, m.Spec()...)
+		}
+	}
+	if r.Jump != nil {
+		ret = append(ret, r.Jump.Spec("-j")...)
+	}
+	if r.Goto != nil {
+		ret = append(ret, r.Goto.Spec("-g")...)
+	}
+	return
+}
+
+// EqualTo returns true, if the rules are
+// equal to each other.
+func (r1 Rule) EqualTo(r2 Rule) bool {
+	return reflect.DeepEqual(r1, r2)
 }
 
 // DNSOrIPPair either holds an IP or DNS and a flag.
 // The boolean not-flag is used when an address or
 // DNS name is reverted with a "!" character.
 type DNSOrIPPair struct {
-	value DNSOrIP
-	not   bool
+	Value DNSOrIP
+	Not   bool
+}
+
+// String returns the part of the iptables rule. It requires its flag as string
+// to generate the correct string, e.g. "! -s 10.0.0.1/32".
+func (d DNSOrIPPair) String(f string) string {
+	return strings.Join(d.Spec(f), " ")
+}
+
+func (d DNSOrIPPair) Spec(f string) []string {
+	s := []string{"!", f, d.Value.String()}
+	if !d.Not {
+		return s[1:]
+	}
+	return s
 }
 
 // DNSOrIP represents either a DNS name or an IP address.
@@ -85,6 +193,7 @@ func (d *DNSOrIP) Set(s string) error {
 	}
 	if _, ipnet, err := net.ParseCIDR(sn); err == nil {
 		d.iP = *ipnet
+		d.dNS = ""
 		return nil
 	}
 	if !vd.IsDNS(s) {
@@ -92,6 +201,13 @@ func (d *DNSOrIP) Set(s string) error {
 	}
 	d.dNS = s
 	return nil
+}
+
+func (d *DNSOrIP) String() string {
+	if d.dNS != "" {
+		return d.dNS
+	}
+	return d.iP.String()
 }
 
 // NewDNSOrIP takes a string and return a DNSOrIP, or an error.
@@ -106,25 +222,33 @@ func NewDNSOrIP(s string) (*DNSOrIP, error) {
 }
 
 // StringPair is a string with a flag.
+// It is used to represent flags that specify a string value
+// and can be negated with a "!".
 type StringPair struct {
 	Not   bool
 	Value string
 }
 
-// BoolPair makes sense in the following case:
-// You can specify a flag that does not accept any
-// values. It is also possible to negate the flag with
-// a "!". In the latter case, Not will be set to true.
-// Value will be set to true, if the flag was used.
-type BoolPair struct {
-	Not   bool
-	Value bool
+func (sp StringPair) String(f string) string {
+	return strings.Join(sp.Spec(f), " ")
+}
+
+func (sp StringPair) Spec(f string) []string {
+	ret := []string{"!", f, sp.Value}
+	if !sp.Not {
+		return ret[1:]
+	}
+	return ret
 }
 
 // Counter represents the package and byte counters.
 type Counter struct {
 	packets uint64
 	bytes   uint64
+}
+
+func (c Counter) String() string {
+	return fmt.Sprintf("[%d:%d]", c.packets, c.bytes)
 }
 
 // Match represents one match expression from the iptables-extension.
@@ -134,6 +258,19 @@ type Match struct {
 	Flags map[string]Flag
 }
 
+func (m Match) String() string {
+	return strings.Join(m.Spec(), " ")
+}
+
+func (m Match) Spec() []string {
+	ret := make([]string, 2, 2+len(m.Flags)*2)
+	ret[0], ret[1] = "-m", m.Type
+	for k, val := range m.Flags {
+		ret = append(ret, val.Spec("--"+k)...)
+	}
+	return ret
+}
+
 // Flag is flag, e.g. --dport 8080. It can be negated with a leading !.
 // Sometimes a flag is followed by several arguments.
 type Flag struct {
@@ -141,9 +278,35 @@ type Flag struct {
 	Values []string
 }
 
+func (fl Flag) String(f string) string {
+	return strings.Join(fl.Spec(f), " ")
+}
+
+func (fl Flag) Spec(f string) []string {
+	ret := []string{"!", f}
+	ret = append(ret, fl.Values...)
+	if !fl.Not {
+		return ret[1:]
+	}
+	return ret
+}
+
 type Target struct {
 	Name  string
 	Flags map[string]Flag
+}
+
+func (t Target) String(name string) string {
+	return strings.Join(t.Spec(name), " ")
+}
+
+func (t Target) Spec(f string) []string {
+	ret := make([]string, 2, 2+len(t.Flags)*2)
+	ret[0], ret[1] = f, t.Name
+	for k, val := range t.Flags {
+		ret = append(ret, val.Spec("--"+k)...)
+	}
+	return ret
 }
 
 // Max buffer size of the ring buffer in the parser.
@@ -157,6 +320,52 @@ type Parser struct {
 		lits [BUF_SIZE]string // literal buffer
 		p    int              // current position in the buffer (max=BUF_SIZE)
 		n    int              // offset (max=BUF_SIZE)
+	}
+}
+
+// NewParser returns a new instance of Parser.
+func NewParser(r io.Reader) *Parser {
+	return &Parser{s: newScanner(r)}
+}
+
+// Parse parses one line and returns a Rule, Comment, Header or DEFAULT.
+func (p *Parser) Parse() (l Line, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("recover from panic: %v", r)
+			return
+		}
+	}()
+	tok, lit := p.scanIgnoreWhitespace()
+	switch tok {
+	case COMMENTLINE:
+		return Comment{Content: lit}, nil
+	case HEADER:
+		return Header{Content: lit}, nil
+	case FLAG:
+		p.unscan(1)
+		return p.parseRule()
+	case COLON:
+		return p.parseDefault(p.s.scanLine())
+	case EOF:
+		return nil, io.EOF //ErrEOF
+	case NEWLINE:
+		return nil, errors.New("empty line")
+	default:
+		return nil, fmt.Errorf("unexpected format of first token: %s, skipping rest %q of the line", lit, p.s.scanLine())
+	}
+}
+
+func (p *Parser) ParseRule() (*Rule, error) {
+	l, err := p.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse rule: %w", err)
+	}
+	switch r := l.(type) {
+	case Rule:
+		return &r, nil
+	default:
+		return nil, errors.New("failed to cast Line to type Rule")
 	}
 }
 
@@ -174,33 +383,6 @@ func init() {
 	}
 }
 
-// NewParser returns a new instance of Parser.
-func NewParser(r io.Reader) *Parser {
-	return &Parser{s: newScanner(r)}
-}
-
-// Parse parses one line and returns a Rule, Comment, Header or DEFAULT.
-func (p *Parser) Parse() (Line, error) {
-	tok, lit := p.scanIgnoreWhitespace()
-	switch tok {
-	case COMMENTLINE:
-		return Comment{Content: lit}, nil
-	case HEADER:
-		return Header{Content: lit}, nil
-	case FLAG:
-		p.unscan(1)
-		return p.parseRule()
-	case COLON:
-		return p.parseDefault(p.s.scanLine())
-	case EOF:
-		return nil, ErrEOF
-	case NEWLINE:
-		return nil, errors.New("empty line")
-	default:
-		return nil, NewParseError(fmt.Sprintf("unexpected format of first token: %s, skipping rest %q of the line", lit, p.s.scanLine()))
-	}
-}
-
 var (
 	regDefault *regexp.Regexp = regexp.MustCompile(`^\s*(\S+)\s+(\S+)\s+(\[\d*\:\d*\])\s*$`)
 	regCounter *regexp.Regexp = regexp.MustCompile(`^\[(\d*)\:(\d*)\]$`)
@@ -210,17 +392,7 @@ func (p *Parser) parseDefault(lit string) (Line, error) {
 	var r Default
 	r.Chain = string(regDefault.ReplaceAll([]byte(lit), []byte("$1")))
 	a := regDefault.ReplaceAll([]byte(lit), []byte("$2"))
-	switch string(a) {
-	case "-":
-		r.Action = "NONE"
-	case "ACCEPT":
-		r.Action = "ACCEPT"
-	case "DROP":
-		r.Action = "DROP"
-	default:
-		r.Action = "UNKNOWN"
-	}
-
+	r.Action = string(a)
 	cs := regDefault.ReplaceAll([]byte(lit), []byte("$3"))
 	c, err := parseCounter(cs)
 	if err != nil {
@@ -253,10 +425,8 @@ func parseCounter(bytes []byte) (Counter, error) {
 type state int
 
 const (
-	// Only use even numbers, to have some local states, that can us odd numbers.
+	// Only use even numbers to have some local states, that can be odd numbers.
 	sStart state = iota * 2
-	sJ
-	sGoto
 	sA
 	sIF // Interpret a flag
 	sINotF
@@ -269,8 +439,7 @@ func (p *Parser) parseRule() (Line, error) {
 	s := sStart
 	var err error
 	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF && tok != NEWLINE; tok, lit = p.scanIgnoreWhitespace() {
-		nextValue := false
-		for !nextValue {
+		for nextValue := false; !nextValue; {
 			nextValue = true
 			switch s {
 			case sStart:
@@ -281,32 +450,39 @@ func (p *Parser) parseRule() (Line, error) {
 				case NOT:
 					s = sNot
 				default:
-
 					s = sError
 					break
 				}
 			case sIF:
 				switch {
 				case isSrc(lit):
-					s, err = p.parseAddr(&r.src, false)
+					r.Source = new(DNSOrIPPair)
+					s, err = p.parseAddr(r.Source, false)
 				case isDest(lit):
-					s, err = p.parseAddr(&r.dest, false)
+					r.Destination = new(DNSOrIPPair)
+					s, err = p.parseAddr(r.Destination, false)
 				case lit == "-p" || lit == "--protocol":
-					s, err = p.parseProtocol(&r.Protocol, false)
+					r.Protocol = new(StringPair)
+					s, err = p.parseProtocol(r.Protocol, false)
 				case isMatch(lit):
 					s, err = p.parseMatch(&r.Matches)
 				case lit == "-A" || lit == "--append":
 					s = sA
 				case lit == "-j" || lit == "--jump":
-					s, err = p.parseTarget(&r.Jump)
+					r.Jump = new(Target)
+					s, err = p.parseTarget(r.Jump)
 				case lit == "-g" || lit == "--goto":
-					s, err = p.parseTarget(&r.Goto)
+					r.Goto = new(Target)
+					s, err = p.parseTarget(r.Goto)
 				case lit == "-i" || lit == "--in-interface":
-					s, err = p.parseStringPair(&r.InInterf, false)
+					r.InInterf = new(StringPair)
+					s, err = p.parseStringPair(r.InInterf, false)
 				case lit == "-o" || lit == "--out-interface":
-					s, err = p.parseStringPair(&r.OutInterf, false)
+					r.OutInterf = new(StringPair)
+					s, err = p.parseStringPair(r.OutInterf, false)
 				case lit == "-f" || lit == "--fragment":
-					r.Fragment = BoolPair{Value: true}
+					_true := true
+					r.Fragment = &(_true)
 					s = sStart
 				case lit == "-4" || lit == "--ipv4":
 					r.IPv4 = true
@@ -321,17 +497,23 @@ func (p *Parser) parseRule() (Line, error) {
 			case sINotF:
 				switch {
 				case isSrc(lit):
-					s, err = p.parseAddr(&r.src, true)
+					r.Source = new(DNSOrIPPair)
+					s, err = p.parseAddr(r.Source, true)
 				case isDest(lit):
-					s, err = p.parseAddr(&r.dest, true)
+					r.Destination = new(DNSOrIPPair)
+					s, err = p.parseAddr(r.Destination, true)
 				case lit == "-p" || lit == "--protocol":
-					s, err = p.parseProtocol(&r.Protocol, true)
+					r.Protocol = new(StringPair)
+					s, err = p.parseProtocol(r.Protocol, true)
 				case lit == "-i" || lit == "--in-interface":
-					s, err = p.parseStringPair(&r.InInterf, true)
+					r.InInterf = new(StringPair)
+					s, err = p.parseStringPair(r.InInterf, true)
 				case lit == "-o" || lit == "--out-interface":
-					s, err = p.parseStringPair(&r.OutInterf, true)
+					r.OutInterf = new(StringPair)
+					s, err = p.parseStringPair(r.OutInterf, true)
 				case lit == "-f" || lit == "--fragment":
-					r.Fragment = BoolPair{Value: true, Not: true}
+					_false := false
+					r.Fragment = &(_false)
 					s = sStart
 				default:
 					err = fmt.Errorf("encountered unknown flag %q, or flag can not be negated with \"!\"", lit)
@@ -356,6 +538,8 @@ func (p *Parser) parseRule() (Line, error) {
 				nextValue = true
 
 			}
+			// Avoid scanning the next token, if an error occured.
+			nextValue = nextValue && err == nil
 		}
 
 	}
@@ -386,7 +570,7 @@ func (p *Parser) parseAddr(r *DNSOrIPPair, not bool) (state, error) {
 	if err != nil {
 		return sError, err
 	}
-	*r = DNSOrIPPair{value: *doi, not: not}
+	*r = DNSOrIPPair{Value: *doi, Not: not}
 	return sStart, nil
 }
 
@@ -403,26 +587,26 @@ func (p *Parser) parseStringPair(sp *StringPair, not bool) (state, error) {
 	return sStart, nil
 }
 
+// mod is not the remainder %, but the modulo function with -a%b != -(a%b).
+// Python has such implementation.
 func mod(a, b int) int {
 	return (a%b + b) % b
 }
 
 // scan returns the next token from the underlying scanner.
-// If a token has been unscanned then read that instead.
+// If tokens bave been unscanned then read the previous one instead.
 func (p *Parser) scan() (tok Token, lit string) {
-	// If we have a token on the buffer, then return it.
+	// If we have a token on the buffer, return it.
 	if p.buf.n != 0 {
 		p.buf.n--
 		return p.buf.toks[mod(p.buf.p-p.buf.n-1, BUF_SIZE)], p.buf.lits[mod(p.buf.p-p.buf.n-1, BUF_SIZE)]
 	}
-
 	// Otherwise read the next token from the scanner.
 	tok, lit = p.s.scan()
 	// Save it to the buffer in case we unscan later.
 	p.buf.toks[p.buf.p], p.buf.lits[p.buf.p] = tok, lit
-	p.buf.p++
+	p.buf.p++ // increase the pointer of the ring buffer.
 	p.buf.p %= BUF_SIZE
-
 	return
 }
 
@@ -458,6 +642,20 @@ func (p *Parser) unscanIgnoreWhitespace(n int) error {
 		}
 	}
 	return errors.New("buffer has no none whitespace characters")
+}
+
+var hasWS *regexp.Regexp = regexp.MustCompile(`\s`)
+
+func enquoteIfWS(s []string) []string {
+	ret := make([]string, len(s))
+	for i, e := range s {
+		if hasWS.MatchString(e) {
+			ret[i] = fmt.Sprintf("%q", e)
+		} else {
+			ret[i] = e
+		}
+	}
+	return ret
 }
 
 func isSrc(s string) bool {

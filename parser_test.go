@@ -2,10 +2,16 @@ package iptables_parser
 
 import (
 	"errors"
+	"io"
 	"net"
 	"reflect"
 	"strings"
 	"testing"
+)
+
+var (
+	_true  bool = true
+	_false bool = false
 )
 
 func parseCIDR(s string) net.IPNet {
@@ -19,6 +25,274 @@ func parseCIDR(s string) net.IPNet {
 	return *r
 }
 
+func TestDNSOrIPPair_Spec(t *testing.T) {
+	for i, tc := range []struct {
+		d DNSOrIPPair
+		f string
+		r []string
+	}{
+		{
+			d: DNSOrIPPair{
+				Not: false,
+				Value: DNSOrIP{
+					iP: parseCIDR("10.0.0.0/24"),
+				},
+			},
+			f: "-d",
+			r: []string{"-d", "10.0.0.0/24"},
+		},
+		{
+			d: DNSOrIPPair{
+				Not: true,
+				Value: DNSOrIP{
+					iP: parseCIDR("10.0.0.0/24"),
+				},
+			},
+			f: "-d",
+			r: []string{"!", "-d", "10.0.0.0/24"},
+		},
+	} {
+		if res := tc.d.Spec(tc.f); !reflect.DeepEqual(res, tc.r) {
+			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
+
+		}
+	}
+}
+
+func TestStringPair_Spec(t *testing.T) {
+	for i, tc := range []struct {
+		p StringPair
+		f string
+		r []string
+	}{
+		{
+			p: StringPair{
+				Not:   false,
+				Value: "foo",
+			},
+			f: "-p",
+			r: []string{"-p", "foo"},
+		},
+		{
+			p: StringPair{
+				Not:   true,
+				Value: "bar",
+			},
+			f: "-i",
+			r: []string{"!", "-i", "bar"},
+		},
+	} {
+		if res := tc.p.Spec(tc.f); !reflect.DeepEqual(res, tc.r) {
+			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
+
+		}
+	}
+}
+
+func TestFlag_String(t *testing.T) {
+	for i, tc := range []struct {
+		p Flag
+		f string
+		r string
+	}{
+		{
+			p: Flag{
+				Not:    false,
+				Values: []string{"foo"},
+			},
+			f: "-p",
+			r: "-p foo",
+		},
+		{
+			p: Flag{
+				Not:    true,
+				Values: []string{"bar", "foo"},
+			},
+			f: "-i",
+			r: "! -i bar foo",
+		},
+	} {
+		if res := tc.p.String(tc.f); !reflect.DeepEqual(res, tc.r) {
+			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
+
+		}
+	}
+}
+
+func TestMatch_String(t *testing.T) {
+	for i, tc := range []struct {
+		p Match
+		r string
+	}{
+		{
+			p: Match{
+				Type: "comment",
+				Flags: map[string]Flag{
+					"comment": Flag{
+						Values: []string{"hallo"},
+					},
+				},
+			},
+			r: "-m comment --comment hallo",
+		},
+		{
+			p: Match{
+				Type: "tcp",
+				Flags: map[string]Flag{
+					"tcp-options": Flag{
+						Not:    true,
+						Values: []string{"bla", "blub"},
+					},
+				},
+			},
+			r: "-m tcp ! --tcp-options bla blub",
+		},
+	} {
+		if res := tc.p.String(); !reflect.DeepEqual(res, tc.r) {
+			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
+
+		}
+	}
+}
+
+func TestTarget_String(t *testing.T) {
+	for i, tc := range []struct {
+		p Target
+		f string
+		r string
+	}{
+		{
+			p: Target{
+				Name: "foo",
+				Flags: map[string]Flag{
+					"bar": Flag{
+						Values: []string{"foo"},
+					},
+				},
+			},
+			f: "-g",
+			r: "-g foo --bar foo",
+		},
+		{
+			p: Target{
+				Name: "foo",
+				Flags: map[string]Flag{
+					"bar": Flag{
+						Not:    true,
+						Values: []string{"foo", "bar"},
+					},
+				},
+			},
+			f: "-j",
+			r: "-j foo ! --bar foo bar",
+		},
+	} {
+		if res := tc.p.String(tc.f); !reflect.DeepEqual(res, tc.r) {
+			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
+
+		}
+	}
+}
+
+func TestRule_Spec(t *testing.T) {
+	for i, tc := range []struct {
+		rule Rule
+		res  []string
+	}{
+		{
+			rule: Rule{
+				Chain: "foo",
+				Source: &DNSOrIPPair{Value: DNSOrIP{
+					iP: parseCIDR("192.168.178.2"),
+				},
+					Not: true},
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, Not: true},
+			},
+			res: []string{"!", "-s", "192.168.178.2/32", "!", "-d", "1.1.1.1/32"},
+		},
+	} {
+		if res := tc.rule.Spec(); !reflect.DeepEqual(res, tc.res) {
+			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.res, res)
+
+		}
+	}
+}
+
+func TestRule_String(t *testing.T) {
+	for i, tc := range []struct {
+		rule Rule
+		res  string
+	}{
+		{
+			rule: Rule{
+				Chain: "foo",
+				Source: &DNSOrIPPair{Value: DNSOrIP{
+					iP: parseCIDR("192.168.178.2"),
+				},
+					Not: true},
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, Not: true},
+			},
+			res: "-A foo ! -s 192.168.178.2/32 ! -d 1.1.1.1/32",
+		},
+		{
+			rule: Rule{
+				Chain: "KUBE-POSTROUTING",
+				Matches: []Match{
+					{
+						Type: "comment",
+						Flags: map[string]Flag{
+							"comment": Flag{Values: []string{`kubernetes service traffic requiring SNAT`}},
+						},
+					},
+				},
+				Jump: &Target{
+					Name: "MASQUERADE",
+					Flags: map[string]Flag{
+						"to-ports": Flag{
+							Values: []string{"200-1000"},
+						},
+					},
+				},
+			},
+			res: `-A KUBE-POSTROUTING -m comment --comment "kubernetes service traffic requiring SNAT" -j MASQUERADE --to-ports 200-1000`,
+		},
+	} {
+		if res := tc.rule.String(); !reflect.DeepEqual(res, tc.res) {
+			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.res, res)
+
+		}
+	}
+}
+
+func Test_NewRuleFromSpec(t *testing.T) {
+	for i, tc := range []struct {
+		spec  []string
+		chain string
+		rule  Rule
+	}{
+		{
+			spec:  []string{"-p", "tcp", "-j", "RETURN"},
+			chain: "foo",
+			rule: Rule{
+				Chain: "foo",
+				Protocol: &StringPair{
+					Value: "tcp",
+				},
+				Jump: &Target{
+					Name: "RETURN",
+				},
+			},
+		},
+	} {
+		if r, err := NewRuleFromSpec(tc.chain, tc.spec...); !reflect.DeepEqual(*r, tc.rule) {
+			if err != nil {
+				t.Errorf("test case %d unexpected error:\n\texp=%q\n\tgot=%q\n", i, tc.rule, r)
+			}
+			t.Errorf("test case %d rule missmatch:\n\texp=%#v\n\tgot=%#v\n", i, tc.rule, r)
+		}
+	}
+}
+
 func TestParser_Parse(t *testing.T) {
 	for i, tc := range []struct {
 		name string
@@ -30,7 +304,7 @@ func TestParser_Parse(t *testing.T) {
 			name: "parse empty string",
 			s:    "",
 			r:    nil,
-			err:  ErrEOF,
+			err:  io.EOF,
 		},
 		{
 			name: "parse comment",
@@ -79,11 +353,11 @@ func TestParser_Parse(t *testing.T) {
 			s:    "-A foo ! -s 192.168.178.2 ! --dst 1.1.1.1",
 			r: Rule{
 				Chain: "foo",
-				src: DNSOrIPPair{value: DNSOrIP{
+				Source: &DNSOrIPPair{Value: DNSOrIP{
 					iP: parseCIDR("192.168.178.2"),
 				},
-					not: true},
-				dest: DNSOrIPPair{value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, not: true},
+					Not: true},
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, Not: true},
 			},
 			err: nil,
 		},
@@ -91,8 +365,47 @@ func TestParser_Parse(t *testing.T) {
 			name: "parse rule",
 			s:    "-A foo --destination=192.168.178.2",
 			r: Rule{
-				Chain: "foo",
-				dest:  DNSOrIPPair{value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
+				Chain:       "foo",
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
+			},
+			err: nil,
+		},
+		{
+			name: "parse rule with DNS name",
+			s:    "-A foo --destination=example.com",
+			r: Rule{
+				Chain:       "foo",
+				Destination: &DNSOrIPPair{Value: DNSOrIP{dNS: "example.com"}},
+			},
+			err: nil,
+		},
+		{
+			name: "parse rule with not ending comment",
+			s:    "-A foo ! --fragment -o=wg0 --in-interface=wlan-0  --destination=192.168.178.2  --protocol all  -j RETURN -m comment --comment \"this crazy\\",
+			r: Rule{
+				Chain:       "foo",
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
+				Protocol: &StringPair{
+					Value: "all",
+				},
+				InInterf: &StringPair{
+					Value: "wlan-0",
+				},
+				OutInterf: &StringPair{
+					Value: "wg0",
+				},
+				Fragment: &_false,
+				Matches: []Match{
+					{
+						Type: "comment",
+						Flags: map[string]Flag{
+							"comment": Flag{
+								Values: []string{`this crazy\`},
+							},
+						},
+					},
+				},
+				Jump: &Target{Name: "RETURN"},
 			},
 			err: nil,
 		},
@@ -100,29 +413,29 @@ func TestParser_Parse(t *testing.T) {
 			name: "parse rule with comment",
 			s:    "-A foo ! --fragment -o=wg0 --in-interface=wlan-0  --destination=192.168.178.2   -m comment --comment \"this crazy\" --protocol all  -j RETURN",
 			r: Rule{
-				Chain: "foo",
-				dest:  DNSOrIPPair{value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
-				Protocol: StringPair{
+				Chain:       "foo",
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
+				Protocol: &StringPair{
 					Value: "all",
 				},
-				InInterf: StringPair{
+				InInterf: &StringPair{
 					Value: "wlan-0",
 				},
-				OutInterf: StringPair{
+				OutInterf: &StringPair{
 					Value: "wg0",
 				},
-				Fragment: BoolPair{Value: true, Not: true},
+				Fragment: &_false,
 				Matches: []Match{
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
 							"comment": Flag{
-								Values: []string{"this crazy"},
+								Values: []string{`this crazy`},
 							},
 						},
 					},
 				},
-				Jump: Target{Name: "RETURN"},
+				Jump: &Target{Name: "RETURN"},
 			},
 			err: nil,
 		},
@@ -130,29 +443,29 @@ func TestParser_Parse(t *testing.T) {
 			name: "parse rule with weird comment",
 			s:    "-A foo  -6 --ipv4 -g NOWHERE ! -f   -i wlan0 --destination=192.168.178.2  ! -p tcp  -m comment --comment \"--this-crazy\"",
 			r: Rule{
-				Chain: "foo",
-				dest:  DNSOrIPPair{value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
-				IPv6:  true,
-				IPv4:  true,
-				Protocol: StringPair{
+				Chain:       "foo",
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
+				IPv6:        true,
+				IPv4:        true,
+				Protocol: &StringPair{
 					Not:   true,
 					Value: "tcp",
 				},
-				InInterf: StringPair{
+				InInterf: &StringPair{
 					Value: "wlan0",
 				},
-				Fragment: BoolPair{Value: true, Not: true},
+				Fragment: &_false, ///BoolPair{Value: true, Not: true},
 				Matches: []Match{
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
 							"comment": Flag{
-								Values: []string{"--this-crazy"},
+								Values: []string{`--this-crazy`},
 							},
 						},
 					},
 				},
-				Goto: Target{Name: "NOWHERE"},
+				Goto: &Target{Name: "NOWHERE"},
 			},
 			err: nil,
 		},
@@ -160,10 +473,10 @@ func TestParser_Parse(t *testing.T) {
 			name: "parse rule with quotes in comment",
 			s:    "-A foo -4 --ipv6  -m tcp --dport 8080 --destination=192.168.178.2   -m comment --comment \"this \\\"crazy\\\"\"",
 			r: Rule{
-				Chain: "foo",
-				dest:  DNSOrIPPair{value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
-				IPv4:  true,
-				IPv6:  true,
+				Chain:       "foo",
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
+				IPv4:        true,
+				IPv6:        true,
 				Matches: []Match{
 					{
 						Type: "tcp",
@@ -175,7 +488,7 @@ func TestParser_Parse(t *testing.T) {
 						Type: "comment",
 						Flags: map[string]Flag{
 							"comment": Flag{
-								Values: []string{"this \\\"crazy\\\""},
+								Values: []string{`this \"crazy\"`},
 							},
 						},
 					},
@@ -187,16 +500,16 @@ func TestParser_Parse(t *testing.T) {
 			name: "parse rule with match all kind of flags",
 			s:    "-A foo -4 --ipv6 --destination=192.168.178.2   -m comment --comment \"this \\\"crazy\\\"\" -m tcp ",
 			r: Rule{
-				Chain: "foo",
-				dest:  DNSOrIPPair{value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
-				IPv4:  true,
-				IPv6:  true,
+				Chain:       "foo",
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
+				IPv4:        true,
+				IPv6:        true,
 				Matches: []Match{
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
 							"comment": Flag{
-								Values: []string{"this \\\"crazy\\\""},
+								Values: []string{`this \"crazy\"`},
 							},
 						},
 					},
@@ -211,12 +524,12 @@ func TestParser_Parse(t *testing.T) {
 		{
 			name: "parse rule with unknown flag",
 			s:    "-A foo --destination=192.168.178.2   -m comment --comment \"this \\\"crazy\\\"\" --fantasy flag",
-			err:  errors.New("failed to parse line, skipping rest \"\" of the line: unknown flag \"--fantasy\" found"),
+			err:  errors.New("failed to parse line, skipping rest \" flag\" of the line: unknown flag \"--fantasy\" found"),
 		},
 		{
 			name: "parse rule with illegal flag",
 			s:    "-A foo --destination=192.168.178.2 ! -j SOMEWHERE  -p fantasy  -m comment --comment \"this \\\"crazy\\\"\" --fantasy flag",
-			err:  errors.New(`failed to parse line, skipping rest "  -p fantasy  -m comment --comment \"this \\\"crazy\\\"\" --fantasy flag" of the line: encountered unknown flag "-j", or flag can not be negated with "!"`),
+			err:  errors.New(`failed to parse line, skipping rest " SOMEWHERE  -p fantasy  -m comment --comment \"this \\\"crazy\\\"\" --fantasy flag" of the line: encountered unknown flag "-j", or flag can not be negated with "!"`),
 		},
 		{
 			name: "parse rule with match expression tcp",
@@ -238,11 +551,11 @@ func TestParser_Parse(t *testing.T) {
 			err: nil,
 		},
 		{
-			name: "parse rule with match expression tcp and a not",
-			s:    "-A foo  -m tcp --tcp-flags SYN,FIN ACK --sport 1010  ! --dport=1000 ! -4",
+			name: "parse rule with match expression tcp and not",
+			s:    "-A foo  -m tcp --tcp-flags SYN,FIN ACK --sport 1010  ! --dport=1000 ! -f",
 			r: Rule{
-				Chain: "foo",
-				IPv4:  false,
+				Chain:    "foo",
+				Fragment: &_false,
 				Matches: []Match{
 					{
 						Type: "tcp",
@@ -261,10 +574,10 @@ func TestParser_Parse(t *testing.T) {
 		},
 		{
 			name: "parse rule with match expression tcp and a lot of flags and overwriting",
-			s:    "-A foo  -m tcp --tcp-flags SYN,FIN ACK --sport 1010 ! --dport=1000:1010  --syn! --syn  ! --tcp-option 1  ! -4 ",
+			s:    "-A foo  -m tcp --tcp-flags SYN,FIN ACK --sport 1010 ! --dport=1000:1010  --syn! --syn  ! --tcp-option 1  ! -f ",
 			r: Rule{
-				Chain: "foo",
-				IPv4:  false,
+				Chain:    "foo",
+				Fragment: &_false,
 				Matches: []Match{
 					{
 						Type: "tcp",
@@ -362,7 +675,7 @@ func TestParser_Parse(t *testing.T) {
 						},
 					},
 				},
-				Jump: Target{
+				Jump: &Target{
 					Name: "DNAT",
 					Flags: map[string]Flag{
 						"random": Flag{},
@@ -383,7 +696,7 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{"kubernetes service nodeports; NOTE: this must be the last rule in this chain"}},
+							"comment": Flag{Values: []string{`kubernetes service nodeports; NOTE: this must be the last rule in this chain`}},
 						},
 					},
 					{
@@ -395,7 +708,7 @@ func TestParser_Parse(t *testing.T) {
 						},
 					},
 				},
-				Jump: Target{
+				Jump: &Target{
 					Name: "KUBE-NODEPORTS",
 				},
 			},
@@ -406,20 +719,19 @@ func TestParser_Parse(t *testing.T) {
 			s:    `-A KUBE-SERVICES -d 10.43.0.10/32 -p udp -m comment --comment "kube-system/kube-dns:dns cluster IP" -m udp --dport 53 -j KUBE-SVC-TCOU7JCQXEZGVUNU`,
 			r: Rule{
 				Chain: "KUBE-SERVICES",
-				dest: DNSOrIPPair{
-					value: DNSOrIP{
+				Destination: &DNSOrIPPair{
+					Value: DNSOrIP{
 						iP: parseCIDR("10.43.0.10/32"),
 					},
 				},
-
-				Protocol: StringPair{
+				Protocol: &StringPair{
 					Value: "udp",
 				},
 				Matches: []Match{
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{"kube-system/kube-dns:dns cluster IP"}},
+							"comment": Flag{Values: []string{`kube-system/kube-dns:dns cluster IP`}},
 						},
 					},
 					{
@@ -431,7 +743,7 @@ func TestParser_Parse(t *testing.T) {
 						},
 					},
 				},
-				Jump: Target{
+				Jump: &Target{
 					Name: "KUBE-SVC-TCOU7JCQXEZGVUNU",
 				},
 			},
@@ -446,11 +758,11 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{"kubernetes service traffic requiring SNAT"}},
+							"comment": Flag{Values: []string{`kubernetes service traffic requiring SNAT`}},
 						},
 					},
 				},
-				Jump: Target{
+				Jump: &Target{
 					Name: "MASQUERADE",
 					Flags: map[string]Flag{
 						"random-fully": Flag{},
@@ -468,11 +780,11 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{"kubernetes service traffic requiring SNAT"}},
+							"comment": Flag{Values: []string{`kubernetes service traffic requiring SNAT`}},
 						},
 					},
 				},
-				Jump: Target{
+				Jump: &Target{
 					Name: "MASQUERADE",
 					Flags: map[string]Flag{
 						"random-fully": Flag{},
@@ -502,9 +814,9 @@ func TestParser_Parse(t *testing.T) {
 			s:    "-A OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER",
 			r: Rule{
 				Chain: "OUTPUT",
-				dest: DNSOrIPPair{
-					not:   true,
-					value: DNSOrIP{iP: parseCIDR("127.0.0.0/8")},
+				Destination: &DNSOrIPPair{
+					Not:   true,
+					Value: DNSOrIP{iP: parseCIDR("127.0.0.0/8")},
 				},
 				Matches: []Match{
 					{
@@ -514,7 +826,7 @@ func TestParser_Parse(t *testing.T) {
 						},
 					},
 				},
-				Jump: Target{Name: "DOCKER"},
+				Jump: &Target{Name: "DOCKER"},
 			},
 			err: nil,
 		},
@@ -523,14 +835,14 @@ func TestParser_Parse(t *testing.T) {
 			s:    "-A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE",
 			r: Rule{
 				Chain: "POSTROUTING",
-				src: DNSOrIPPair{
-					value: DNSOrIP{iP: parseCIDR("172.17.0.0/16")},
+				Source: &DNSOrIPPair{
+					Value: DNSOrIP{iP: parseCIDR("172.17.0.0/16")},
 				},
-				OutInterf: StringPair{
+				OutInterf: &StringPair{
 					Not:   true,
 					Value: "docker0",
 				},
-				Jump: Target{
+				Jump: &Target{
 					Name:  "MASQUERADE",
 					Flags: map[string]Flag{},
 				},
@@ -542,14 +854,14 @@ func TestParser_Parse(t *testing.T) {
 			s:    "-A POSTROUTING -s 172.18.0.0/16 ! -o br-21dc6a502417 -j MASQUERADE",
 			r: Rule{
 				Chain: "POSTROUTING",
-				src: DNSOrIPPair{
-					value: DNSOrIP{iP: parseCIDR("172.18.0.0/16")},
+				Source: &DNSOrIPPair{
+					Value: DNSOrIP{iP: parseCIDR("172.18.0.0/16")},
 				},
-				OutInterf: StringPair{
+				OutInterf: &StringPair{
 					Not:   true,
 					Value: "br-21dc6a502417",
 				},
-				Jump: Target{
+				Jump: &Target{
 					Name:  "MASQUERADE",
 					Flags: map[string]Flag{},
 				},
@@ -561,13 +873,13 @@ func TestParser_Parse(t *testing.T) {
 			s:    "-A POSTROUTING -s 172.18.0.3/32 -d 172.18.0.3/32 -p tcp -m tcp --dport 6443 -j MASQUERADE",
 			r: Rule{
 				Chain: "POSTROUTING",
-				src: DNSOrIPPair{
-					value: DNSOrIP{iP: parseCIDR("172.18.0.3/32")},
+				Source: &DNSOrIPPair{
+					Value: DNSOrIP{iP: parseCIDR("172.18.0.3/32")},
 				},
-				dest: DNSOrIPPair{
-					value: DNSOrIP{iP: parseCIDR("172.18.0.3/32")},
+				Destination: &DNSOrIPPair{
+					Value: DNSOrIP{iP: parseCIDR("172.18.0.3/32")},
 				},
-				Protocol: StringPair{
+				Protocol: &StringPair{
 					Value: "tcp",
 				},
 				Matches: []Match{
@@ -580,7 +892,7 @@ func TestParser_Parse(t *testing.T) {
 						},
 					},
 				},
-				Jump: Target{
+				Jump: &Target{
 					Name:  "MASQUERADE",
 					Flags: map[string]Flag{},
 				},
@@ -592,8 +904,8 @@ func TestParser_Parse(t *testing.T) {
 			s:    "-A DOCKER -i docker0 -j RETURN",
 			r: Rule{
 				Chain:    "DOCKER",
-				InInterf: StringPair{Value: "docker0"},
-				Jump: Target{
+				InInterf: &StringPair{Value: "docker0"},
+				Jump: &Target{
 					Name: "RETURN",
 				},
 			},
@@ -614,7 +926,7 @@ func TestParser_ParseMore(t *testing.T) {
 	for i, tc := range []struct {
 		name string
 		s    string
-		r    []Line
+		r    []interface{}
 	}{
 		{
 			name: "parse more lines",
@@ -623,7 +935,7 @@ func TestParser_ParseMore(t *testing.T) {
 				:hello ACCEPT [10:100]
 				-A foo ! --fragment -o=wg0 --in-interface=wlan-0  --destination=192.168.178.2   -m comment --comment "this crazy" --protocol all  -j RETURN
 			blub`,
-			r: []Line{
+			r: []interface{}{
 				Comment{Content: " hello you."},
 				Header{Content: "hello you."},
 				Default{
@@ -634,31 +946,31 @@ func TestParser_ParseMore(t *testing.T) {
 						bytes:   100,
 					}},
 				Rule{
-					Chain: "foo",
-					dest:  DNSOrIPPair{value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
-					Protocol: StringPair{
+					Chain:       "foo",
+					Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
+					Protocol: &StringPair{
 						Value: "all",
 					},
-					InInterf: StringPair{
+					InInterf: &StringPair{
 						Value: "wlan-0",
 					},
-					OutInterf: StringPair{
+					OutInterf: &StringPair{
 						Value: "wg0",
 					},
-					Fragment: BoolPair{Value: true, Not: true},
+					Fragment: &_false, //BoolPair{Value: true, Not: true},
 					Matches: []Match{
 						{
 							Type: "comment",
 							Flags: map[string]Flag{
 								"comment": Flag{
-									Values: []string{"this crazy"},
+									Values: []string{`this crazy`},
 								},
 							},
 						},
 					},
-					Jump: Target{Name: "RETURN"},
+					Jump: &Target{Name: "RETURN"},
 				},
-				NewParseError("unexpected format of first token: blub, skipping rest \"\" of the line"),
+				errors.New("unexpected format of first token: blub, skipping rest \"\" of the line"),
 				Rule{
 					Chain: "KUBE-POSTROUTING",
 					Matches: []Match{
@@ -669,7 +981,7 @@ func TestParser_ParseMore(t *testing.T) {
 							},
 						},
 					},
-					Jump: Target{
+					Jump: &Target{
 						Name: "MASQUERADE",
 						Flags: map[string]Flag{
 							"random-fully": Flag{},
@@ -690,12 +1002,12 @@ func TestParser_ParseMore(t *testing.T) {
 -A POSTROUTING -s 172.18.0.3/32 -d 172.18.0.3/32 -p tcp -m tcp --dport 6443 -j MASQUERADE
 -A DOCKER -i docker0 -j RETURN
 `,
-			r: []Line{
+			r: []interface{}{
 				Rule{
 					Chain: "OUTPUT",
-					dest: DNSOrIPPair{
-						not:   true,
-						value: DNSOrIP{iP: parseCIDR("127.0.0.0/8")},
+					Destination: &DNSOrIPPair{
+						Not:   true,
+						Value: DNSOrIP{iP: parseCIDR("127.0.0.0/8")},
 					},
 					Matches: []Match{
 						{
@@ -705,45 +1017,45 @@ func TestParser_ParseMore(t *testing.T) {
 							},
 						},
 					},
-					Jump: Target{Name: "DOCKER"},
+					Jump: &Target{Name: "DOCKER"},
 				},
 				Rule{
 					Chain: "POSTROUTING",
-					src: DNSOrIPPair{
-						value: DNSOrIP{iP: parseCIDR("172.17.0.0/16")},
+					Source: &DNSOrIPPair{
+						Value: DNSOrIP{iP: parseCIDR("172.17.0.0/16")},
 					},
-					OutInterf: StringPair{
+					OutInterf: &StringPair{
 						Not:   true,
 						Value: "docker0",
 					},
-					Jump: Target{
+					Jump: &Target{
 						Name:  "MASQUERADE",
 						Flags: map[string]Flag{},
 					},
 				},
 				Rule{
 					Chain: "POSTROUTING",
-					src: DNSOrIPPair{
-						value: DNSOrIP{iP: parseCIDR("172.18.0.0/16")},
+					Source: &DNSOrIPPair{
+						Value: DNSOrIP{iP: parseCIDR("172.18.0.0/16")},
 					},
-					OutInterf: StringPair{
+					OutInterf: &StringPair{
 						Not:   true,
 						Value: "br-21dc6a502417",
 					},
-					Jump: Target{
+					Jump: &Target{
 						Name:  "MASQUERADE",
 						Flags: map[string]Flag{},
 					},
 				},
 				Rule{
 					Chain: "POSTROUTING",
-					src: DNSOrIPPair{
-						value: DNSOrIP{iP: parseCIDR("172.18.0.3/32")},
+					Source: &DNSOrIPPair{
+						Value: DNSOrIP{iP: parseCIDR("172.18.0.3/32")},
 					},
-					dest: DNSOrIPPair{
-						value: DNSOrIP{iP: parseCIDR("172.18.0.3/32")},
+					Destination: &DNSOrIPPair{
+						Value: DNSOrIP{iP: parseCIDR("172.18.0.3/32")},
 					},
-					Protocol: StringPair{
+					Protocol: &StringPair{
 						Value: "tcp",
 					},
 					Matches: []Match{
@@ -756,15 +1068,15 @@ func TestParser_ParseMore(t *testing.T) {
 							},
 						},
 					},
-					Jump: Target{
+					Jump: &Target{
 						Name:  "MASQUERADE",
 						Flags: map[string]Flag{},
 					},
 				},
 				Rule{
 					Chain:    "DOCKER",
-					InInterf: StringPair{Value: "docker0"},
-					Jump: Target{
+					InInterf: &StringPair{Value: "docker0"},
+					Jump: &Target{
 						Name: "RETURN",
 					},
 				},
@@ -773,7 +1085,7 @@ func TestParser_ParseMore(t *testing.T) {
 	} {
 		p := NewParser(strings.NewReader(tc.s))
 		j, k := 0, 0
-		for s, err := p.Parse(); err != ErrEOF; s, err = p.Parse() {
+		for s, err := p.Parse(); err != io.EOF; s, err = p.Parse() {
 			if err == nil {
 				if !reflect.DeepEqual(tc.r[j], s) {
 					t.Errorf("%d. %s: %q result mismatch:\n\texp=%v\n\tgot=%v\n\terr=%v", i, tc.name, tc.s, tc.r[j], s, err)
