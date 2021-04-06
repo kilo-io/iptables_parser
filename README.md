@@ -26,26 +26,37 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
-	"os/exec"
-	"strings"
 
-	ipp "github.com/leonnicolas/iptables_parser"
+	ipt "github.com/coreos/go-iptables/iptables"
+	iptp "github.com/leonnicolas/iptables_parser"
 )
 
 func main() {
-	o, err := exec.Command("iptables-save").Output()
+	t, err := ipt.NewWithProtocol(ipt.ProtocolIPv4)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	p := ipp.NewParser(strings.NewReader(string(o)))
-	for l, err := p.Parse(); err != io.EOF; l, err = p.Parse() {
+	rs, err := t.List("filter", "DOCKER")
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	for _, r := range rs {
+		fmt.Println(r)
+		tr, err := iptp.NewFromString(r)
 		if err != nil {
-			fmt.Println(err.Error())
-		} else {
-			fmt.Println(l)
+			fmt.Printf("Error: %v", err)
+			continue
 		}
+		switch r := tr.(type) {
+		case iptp.Rule:
+			fmt.Printf("rule parsed: %v\n", r)
+		case iptp.Policy:
+			fmt.Printf("policy parsed: %v\n", r)
+		default:
+			fmt.Printf("something else happend: %v\n", r)
+		}
+
 	}
 }
 ```

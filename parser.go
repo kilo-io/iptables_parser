@@ -50,10 +50,18 @@ type Policy struct {
 }
 
 func (d Policy) String() string {
+	prefix := ":"
+	if d.UserDefined != nil {
+		if *d.UserDefined {
+			prefix = "-N "
+		} else {
+			prefix = "-P "
+		}
+	}
 	if d.Counter != nil {
-		return fmt.Sprintf(":%s %s %s", d.Chain, d.Action, d.Counter.String())
+		return fmt.Sprintf("%s%s %s %s", prefix, d.Chain, d.Action, d.Counter.String())
 	} else {
-		return fmt.Sprintf(":%s %s", d.Chain, d.Action)
+		return fmt.Sprintf("%s%s %s", prefix, d.Chain, d.Action)
 	}
 }
 
