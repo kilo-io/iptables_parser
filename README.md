@@ -6,7 +6,7 @@ This parser is inspired by [Ben Johnson's SQL Parser](https://github.com/benbjoh
 ## Description
 
 This parser parses lines returned from `iptables-save` and returns a Line or an Error.
-A Line can be a Rule, Comment, Default (default rule) or Header,
+A Line can be a Rule, Comment, Policy (default rule) or Header,
 all of them being structs.
 
 ### Match Extensions

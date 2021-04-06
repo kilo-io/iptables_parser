@@ -327,10 +327,10 @@ func TestParser_Parse(t *testing.T) {
 		{
 			name: "parse default rule",
 			s:    ":hello ACCEPT [10:100]",
-			r: Default{
+			r: Policy{
 				Chain:  "hello",
 				Action: "ACCEPT",
-				Counter: Counter{
+				Counter: &Counter{
 					packets: 10,
 					bytes:   100,
 				}},
@@ -339,13 +339,32 @@ func TestParser_Parse(t *testing.T) {
 		{
 			name: "parse default rule",
 			s:    ":hello-chain DROP [0:100]",
-			r: Default{
+			r: Policy{
 				Chain:  "hello-chain",
 				Action: "DROP",
-				Counter: Counter{
+				Counter: &Counter{
 					packets: 0,
 					bytes:   100,
 				}},
+			err: nil,
+		},
+		{
+			name: "parse policy",
+			s:    "-P hello-chain DROP",
+			r: Policy{
+				Chain:       "hello-chain",
+				Action:      "DROP",
+				UserDefined: &_false,
+			},
+			err: nil,
+		},
+		{
+			name: "parse userdefined policy",
+			s:    "-N hello-chain",
+			r: Policy{
+				Chain:       "hello-chain",
+				UserDefined: &_true,
+			},
 			err: nil,
 		},
 		{
@@ -800,10 +819,10 @@ func TestParser_Parse(t *testing.T) {
 		{
 			name: "parse default rule",
 			s:    ":hello-chain DROP [0:100]\n -A FORWARD -s 192.1.1.1",
-			r: Default{
+			r: Policy{
 				Chain:  "hello-chain",
 				Action: "DROP",
-				Counter: Counter{
+				Counter: &Counter{
 					packets: 0,
 					bytes:   100,
 				}},
@@ -938,10 +957,10 @@ func TestParser_ParseMore(t *testing.T) {
 			r: []interface{}{
 				Comment{Content: " hello you."},
 				Header{Content: "hello you."},
-				Default{
+				Policy{
 					Chain:  "hello",
 					Action: "ACCEPT",
-					Counter: Counter{
+					Counter: &Counter{
 						packets: 10,
 						bytes:   100,
 					}},
@@ -1078,6 +1097,63 @@ func TestParser_ParseMore(t *testing.T) {
 					InInterf: &StringPair{Value: "docker0"},
 					Jump: &Target{
 						Name: "RETURN",
+					},
+				},
+			},
+		},
+		{
+			name: "Parse some rules from iptables -S",
+			s: `-P INPUT ACCEPT
+			-P FORWARD DROP
+			-P OUTPUT ACCEPT
+			-N DOCKER
+			-N DOCKER-ISOLATION-STAGE-1
+			-N DOCKER-ISOLATION-STAGE-2
+			-N DOCKER-USER
+			-A FORWARD -j DOCKER-USER
+			-A FORWARD -j DOCKER-ISOLATION-STAGE-1`,
+			r: []interface{}{
+				Policy{
+					UserDefined: &_false,
+					Chain:       "INPUT",
+					Action:      "ACCEPT",
+				},
+				Policy{
+					UserDefined: &_false,
+					Chain:       "FORWARD",
+					Action:      "DROP",
+				},
+				Policy{
+					UserDefined: &_false,
+					Chain:       "OUTPUT",
+					Action:      "ACCEPT",
+				},
+				Policy{
+					UserDefined: &_true,
+					Chain:       "DOCKER",
+				},
+				Policy{
+					UserDefined: &_true,
+					Chain:       "DOCKER-ISOLATION-STAGE-1",
+				},
+				Policy{
+					UserDefined: &_true,
+					Chain:       "DOCKER-ISOLATION-STAGE-2",
+				},
+				Policy{
+					UserDefined: &_true,
+					Chain:       "DOCKER-USER",
+				},
+				Rule{
+					Chain: "FORWARD",
+					Jump: &Target{
+						Name: "DOCKER-USER",
+					},
+				},
+				Rule{
+					Chain: "FORWARD",
+					Jump: &Target{
+						Name: "DOCKER-ISOLATION-STAGE-1",
 					},
 				},
 			},

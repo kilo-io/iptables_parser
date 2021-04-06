@@ -37,15 +37,24 @@ func (h Header) String() string {
 	return "*" + h.Content
 }
 
-// Default represents a default rule. They start with :.
-type Default struct {
-	Chain   string
-	Action  string
-	Counter Counter
+// Policy represents a build-in policy. They can be parsed from
+// iprables-save looking like ":FORWARD DROP [0:100]" They start with :.
+// They can also be parsed from "iptables -S" looking like "-N|-P chain [target]".
+// In the latter case, UserDefined will be set. For user defined policies, Action
+// should be an empty string "" or "-".
+type Policy struct {
+	Chain       string
+	Action      string
+	UserDefined *bool // nil if unknown
+	Counter     *Counter
 }
 
-func (d Default) String() string {
-	return fmt.Sprintf(":%s %s %s", d.Chain, d.Action, d.Counter.String())
+func (d Policy) String() string {
+	if d.Counter != nil {
+		return fmt.Sprintf(":%s %s %s", d.Chain, d.Action, d.Counter.String())
+	} else {
+		return fmt.Sprintf(":%s %s", d.Chain, d.Action)
+	}
 }
 
 // Rule represents a rule in an iptables dump. Normally the start with -A.
@@ -80,6 +89,12 @@ func NewRuleFromSpec(chain string, rulespec ...string) (*Rule, error) {
 // a valid rule, or contains unknown, or not implemented extensions.
 func NewRuleFromString(s string) (*Rule, error) {
 	return NewParser(strings.NewReader(s)).ParseRule()
+}
+
+// NewFromString takes a string a parses it until the EOF or NEWLINE
+// to return a Header, Policy or Rule. It will return an error otherwise.
+func NewFromString(s string) (Line, error) {
+	return NewParser(strings.NewReader(s)).Parse()
 }
 
 // String returns the rule as a String, similar to how iptables-save prints the rules
@@ -389,7 +404,7 @@ var (
 )
 
 func (p *Parser) parseDefault(lit string) (Line, error) {
-	var r Default
+	var r Policy
 	r.Chain = string(regDefault.ReplaceAll([]byte(lit), []byte("$1")))
 	a := regDefault.ReplaceAll([]byte(lit), []byte("$2"))
 	r.Action = string(a)
@@ -399,7 +414,7 @@ func (p *Parser) parseDefault(lit string) (Line, error) {
 		return nil, err
 	}
 
-	r.Counter = c
+	r.Counter = &c
 	return r, nil
 }
 
@@ -426,11 +441,13 @@ type state int
 
 const (
 	// Only use even numbers to have some local states, that can be odd numbers.
-	sStart state = iota * 2
-	sA
-	sIF // Interpret a flag
-	sINotF
-	sNot
+	sStart state = iota * 2 // Start state
+	sIF                     // Interpret a flag
+	sINotF                  // Interprete flag with NOT
+	sNot                    // NOT state
+	sA                      // append rule
+	sN                      // user defined chain
+	sP                      // policy for build-in chain
 	sError
 )
 
@@ -468,6 +485,10 @@ func (p *Parser) parseRule() (Line, error) {
 					s, err = p.parseMatch(&r.Matches)
 				case lit == "-A" || lit == "--append":
 					s = sA
+				case lit == "-P" || lit == "--policy":
+					s = sP
+				case lit == "-N" || lit == "--new-chain":
+					s = sN
 				case lit == "-j" || lit == "--jump":
 					r.Jump = new(Target)
 					s, err = p.parseTarget(r.Jump)
@@ -522,7 +543,16 @@ func (p *Parser) parseRule() (Line, error) {
 			case sA:
 				r.Chain = lit
 				s = sStart
-
+			case sN:
+				r.Chain = lit
+				s = sStart
+				p.unscan(1)
+				return p.parseUserDefinedPolicy()
+			case sP:
+				r.Chain = lit
+				s = sStart
+				p.unscan(1)
+				return p.parseDefaultPolicy()
 			case sNot:
 				switch tok {
 				case FLAG:
@@ -544,6 +574,35 @@ func (p *Parser) parseRule() (Line, error) {
 
 	}
 	return r, nil
+}
+
+func (p *Parser) parseUserDefinedPolicy() (Line, error) {
+	return p.parsePolicy(true)
+}
+
+func (p *Parser) parseDefaultPolicy() (Line, error) {
+	return p.parsePolicy(false)
+}
+
+func (p *Parser) parsePolicy(d bool) (Line, error) {
+	ret := Policy{
+		UserDefined: new(bool), // create a new pointer in case the caller keeps using the input variable. This ain't rust.
+	}
+	*ret.UserDefined = d
+	if tok, lit := p.scanIgnoreWhitespace(); tok != EOF && tok != NEWLINE {
+		ret.Chain = lit
+	} else {
+		return nil, errors.New("unexpected end of line")
+	}
+	if tok, lit := p.scanIgnoreWhitespace(); tok != EOF && tok != NEWLINE {
+		ret.Action = lit
+	} else {
+		return ret, nil
+	}
+	if tok, lit := p.scanIgnoreWhitespace(); tok != EOF && tok != NEWLINE {
+		return nil, fmt.Errorf("found %q, expected EOF or newline.", lit)
+	}
+	return ret, nil
 }
 
 // parseProtocol is not restricted on protocol types because the names
