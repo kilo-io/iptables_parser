@@ -29,7 +29,7 @@ import (
 	"log"
 
 	ipt "github.com/coreos/go-iptables/iptables"
-	iptp "github.com/leonnicolas/iptables_parser"
+	iptp "github.com/kilo-io/iptables_parser"
 )
 
 func main() {

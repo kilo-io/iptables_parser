@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	vd "github.com/leonnicolas/iptables_parser/validate_dns"
+	vd "github.com/kilo-io/iptables_parser/validate_dns"
 )
 
 // Line represents a line in a iptables dump, e.g. generated with iptables-save.
