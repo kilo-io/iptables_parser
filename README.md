@@ -5,13 +5,13 @@ This parser is inspired by [Ben Johnson's SQL Parser](https://github.com/benbjoh
 
 ## Description
 
-This parser parses lines returned from `iptables-save` and returns a Line or an Error.
+This parser parses lines returned from `iptables-save` or `iptables -S` and returns a Line or an Error.
 A Line can be a Rule, Comment, Policy (default rule) or Header,
 all of them being structs.
 
 ### Match Extensions
 
-iptables has a lot of match extensions.
+`iptables` has a lot of match extensions.
 Only a few are implemented.
 If one is not implemented, the parses returns an error for that line.
 
@@ -60,4 +60,3 @@ func main() {
 	}
 }
 ```
-
