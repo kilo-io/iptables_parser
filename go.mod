@@ -1,3 +1,3 @@
-module github.com/leonnicolas/iptables_parser
+module github.com/kilo-io/iptables_parser
 
 go 1.16
