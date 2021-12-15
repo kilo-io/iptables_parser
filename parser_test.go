@@ -817,6 +817,34 @@ func TestParser_Parse(t *testing.T) {
 			err: nil,
 		},
 		{
+			name: "parse rule with match expression statistic",
+			s:    "-A foo ! -s 192.168.178.2 ! --dst 1.1.1.1 -m statistic --mode random --probability 0.50000000000 --every 10 --packet 5",
+			r: Rule{
+				Chain: "foo",
+				Source: &DNSOrIPPair{Value: DNSOrIP{
+					iP: parseCIDR("192.168.178.2"),
+				},
+					Not: true},
+				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, Not: true},
+				Matches: []Match{{Type: "statistic",
+					Flags: map[string]Flag{
+						"mode": {
+							Values: []string{`random`},
+						},
+						"probability": {
+							Values: []string{`0.50000000000`},
+						},
+						"packet": {
+							Values: []string{`5`},
+						},
+						"every": {
+							Values: []string{`10`},
+						},
+					}}},
+			},
+			err: nil,
+		},
+		{
 			name: "parse default rule",
 			s:    ":hello-chain DROP [0:100]\n -A FORWARD -s 192.1.1.1",
 			r: Policy{
