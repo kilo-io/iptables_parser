@@ -26,6 +26,8 @@ func (p *Parser) parseMatch(ms *[]Match) (state, error) {
 		s, err = p.parseAddrtype(&m.Flags)
 	case "udp":
 		s, err = p.parseUdp(&m.Flags)
+	case "statistic":
+		s, err = p.parseStatistic(&m.Flags)
 	default:
 		if _, ok := matchModules[lit]; ok {
 			return sError, fmt.Errorf("match modules %q is not implemented", lit)
@@ -37,6 +39,88 @@ func (p *Parser) parseMatch(ms *[]Match) (state, error) {
 	}
 	*ms = append(*ms, m)
 	return s, nil
+}
+
+func (p *Parser) parseStatistic(f *map[string]Flag) (state, error) {
+	s := sStart
+	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF; tok, lit = p.scanIgnoreWhitespace() {
+		for nextValue := false; !nextValue; {
+			nextValue = true
+			switch s {
+			case sStart:
+				switch tok {
+				case NOT:
+					s = sINotF
+				case FLAG:
+					s = sIF
+					nextValue = false
+				default:
+					return sError, fmt.Errorf("unexpected token %q, expected flag, or \"!\"", lit)
+				}
+			case sINotF:
+				switch {
+				case lit == "--probability":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["probability"] = Flag{
+						Not:    true,
+						Values: []string{lit},
+					}
+					s = sStart
+				case lit == "--every":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["every"] = Flag{
+						Not:    true,
+						Values: []string{lit},
+					}
+					s = sStart
+				default:
+					// The end of the match statement is reached.
+					// Since we already scanned the ! charackter,
+					// we have to return the sNot state, or
+					// unscanIgnoreWhitespace twice (this can fail
+					// because of a fixed sized buffer, that is full
+					// of Whitespaces).
+					p.unscan(1) //IgnoreWhitespace(2) // unscan 2
+					return sNot, nil
+				}
+			case sIF:
+				switch {
+				case lit == "--mode":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["mode"] = Flag{
+						Values: []string{lit},
+					}
+					s = sStart
+				case lit == "--probability":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["probability"] = Flag{
+						Values: []string{lit},
+					}
+					s = sStart
+				case lit == "--packet":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["packet"] = Flag{
+						Values: []string{lit},
+					}
+					s = sStart
+				case lit == "--every":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["every"] = Flag{
+						Values: []string{lit},
+					}
+					s = sStart
+				default:
+					// The end of the match statement is reached.
+					p.unscan(1)
+					return sStart, nil
+				}
+
+			default:
+				return sStart, errors.New("unexpected error parsing match extension")
+			}
+		}
+	}
+	return sStart, nil
 }
 
 func (p *Parser) parseUdp(f *map[string]Flag) (state, error) {
