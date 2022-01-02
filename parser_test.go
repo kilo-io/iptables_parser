@@ -473,7 +473,7 @@ func TestParser_Parse(t *testing.T) {
 				InInterf: &StringPair{
 					Value: "wlan0",
 				},
-				Fragment: &_false, ///BoolPair{Value: true, Not: true},
+				Fragment: &_false, // /BoolPair{Value: true, Not: true},
 				Matches: []Match{
 					{
 						Type: "comment",
@@ -700,6 +700,26 @@ func TestParser_Parse(t *testing.T) {
 						"random": Flag{},
 						"to-destination": Flag{
 							Values: []string{"192.168.1.1-192.168.1.2:80-81"},
+						},
+					},
+				},
+			},
+			err: nil,
+		},
+		{
+			name: "parse rule with jump target SNAT",
+			s:    "-A foo -o eth0 -4 -j SNAT --to-source 192.168.1.1",
+			r: Rule{
+				Chain: "foo",
+				IPv4:  true,
+				OutInterf: &StringPair{
+					Value: "eth0",
+				},
+				Jump: &Target{
+					Name: "SNAT",
+					Flags: map[string]Flag{
+						"to-source": Flag{
+							Values: []string{"192.168.1.1"},
 						},
 					},
 				},
@@ -959,13 +979,15 @@ func TestParser_Parse(t *testing.T) {
 			err: nil,
 		},
 	} {
-		p := NewParser(strings.NewReader(tc.s))
-		s, err := p.Parse()
-		if !reflect.DeepEqual(tc.r, s) {
-			t.Errorf("%d. %s: %q result mismatch:\n\texp=%v\n\tgot=%v\n\terr=%v", i, tc.name, tc.s, tc.r, s, err)
-		} else if tc.err != err && tc.err.Error() != err.Error() {
-			t.Errorf("%d. %s: %q error mismatch:\n\texp=%v\n\tgot=%v.", i, tc.name, tc.s, tc.err, err)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewParser(strings.NewReader(tc.s))
+			s, err := p.Parse()
+			if !reflect.DeepEqual(tc.r, s) {
+				t.Errorf("%d. %s: %q result mismatch:\n\texp=%v\n\tgot=%v\n\terr=%v", i, tc.name, tc.s, tc.r, s, err)
+			} else if tc.err != err && tc.err.Error() != err.Error() {
+				t.Errorf("%d. %s: %q error mismatch:\n\texp=%v\n\tgot=%v.", i, tc.name, tc.s, tc.err, err)
+			}
+		})
 	}
 }
 
@@ -1004,7 +1026,7 @@ func TestParser_ParseMore(t *testing.T) {
 					OutInterf: &StringPair{
 						Value: "wg0",
 					},
-					Fragment: &_false, //BoolPair{Value: true, Not: true},
+					Fragment: &_false, // BoolPair{Value: true, Not: true},
 					Matches: []Match{
 						{
 							Type: "comment",
