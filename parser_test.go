@@ -727,6 +727,27 @@ func TestParser_Parse(t *testing.T) {
 			err: nil,
 		},
 		{
+			name: "parse rule with jump target fully-random SNAT",
+			s:    "-A foo -o eth0 -4 -j SNAT --to-source 192.168.1.1 --random-fully",
+			r: Rule{
+				Chain: "foo",
+				IPv4:  true,
+				OutInterf: &StringPair{
+					Value: "eth0",
+				},
+				Jump: &Target{
+					Name: "SNAT",
+					Flags: map[string]Flag{
+						"to-source": Flag{
+							Values: []string{"192.168.1.1"},
+						},
+						"random-fully": Flag{},
+					},
+				},
+			},
+			err: nil,
+		},
+		{
 			name: "parse real rule made by kubernetes",
 			s:    `-A KUBE-SERVICES -m comment --comment "kubernetes service nodeports; NOTE: this must be the last rule in this chain" -m addrtype --dst-type LOCAL -j KUBE-NODEPORTS`,
 			r: Rule{

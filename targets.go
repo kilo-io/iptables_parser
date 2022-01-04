@@ -121,6 +121,15 @@ func (p *Parser) parseSNAT(f *map[string]Flag) (state, error) {
 						Values: []string{str},
 					}
 					s = sStart
+				case lit == "--random":
+					(*f)["random"] = Flag{}
+					s = sStart
+				case lit == "--random-fully":
+					(*f)["random-fully"] = Flag{}
+					s = sStart
+				case lit == "--persistent":
+					(*f)["persistent"] = Flag{}
+					s = sStart
 				default:
 					// The end of the match statement is reached.
 					p.unscan(1)
