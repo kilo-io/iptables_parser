@@ -1,14 +1,22 @@
+---
 name: Test
 
 on:
-  push:
   pull_request:
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@main
-    - uses: actions/setup-go@v1
-      with:
-        go-version: '1.16'
-    - run: go test ./...
+      - uses: actions/checkout@main
+      - uses: actions/setup-go@v1
+        with:
+          go-version: '1.16'
+      - run: go test ./...
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@main
+      - uses: actions/setup-go@v1
+        with:
+          go-version: '1.16'
+      - run: '[ -z "$(gofmt -e -d ./)" ]'

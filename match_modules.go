@@ -80,7 +80,7 @@ func (p *Parser) parseStatistic(f *map[string]Flag) (state, error) {
 					// unscanIgnoreWhitespace twice (this can fail
 					// because of a fixed sized buffer, that is full
 					// of Whitespaces).
-					p.unscan(1) //IgnoreWhitespace(2) // unscan 2
+					p.unscan(1) // IgnoreWhitespace(2) // unscan 2
 					return sNot, nil
 				}
 			case sIF:
@@ -160,7 +160,7 @@ func (p *Parser) parseUdp(f *map[string]Flag) (state, error) {
 					// unscanIgnoreWhitespace twice (this can fail
 					// because of a fixed sized buffer, that is full
 					// of Whitespaces).
-					p.unscan(1) //IgnoreWhitespace(2) // unscan 2
+					p.unscan(1) // IgnoreWhitespace(2) // unscan 2
 					return sNot, nil
 				}
 			case sIF:
@@ -188,10 +188,10 @@ func (p *Parser) parseUdp(f *map[string]Flag) (state, error) {
 	}
 	return sStart, nil
 }
+
 func (p *Parser) parseAddrtype(f *map[string]Flag) (state, error) {
 	s := sStart
 	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF; tok, lit = p.scanIgnoreWhitespace() {
-
 		for nextValue := false; !nextValue; {
 			nextValue = true
 			switch s {
@@ -228,7 +228,7 @@ func (p *Parser) parseAddrtype(f *map[string]Flag) (state, error) {
 					// unscanIgnoreWhitespace twice (this can fail
 					// because of a fixed sized buffer, that is full
 					// of Whitespaces).
-					p.unscan(1) //IgnoreWhitespace(2) // unscan 2
+					p.unscan(1) // IgnoreWhitespace(2) // unscan 2
 					return sNot, nil
 				}
 			case sIF:
@@ -334,7 +334,7 @@ func (p *Parser) parseTcp(f *map[string]Flag) (state, error) {
 					// unscanIgnoreWhitespace twice (this can fail
 					// because of a fixed sized buffer, that is full
 					// of Whitespaces).
-					p.unscan(1) //IgnoreWhitespace(2) // unscan 2
+					p.unscan(1) // IgnoreWhitespace(2) // unscan 2
 					return sNot, nil
 				}
 			case sIF:

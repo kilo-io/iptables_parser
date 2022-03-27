@@ -60,9 +60,8 @@ func (d Policy) String() string {
 	}
 	if d.Counter != nil {
 		return fmt.Sprintf("%s%s %s %s", prefix, d.Chain, d.Action, d.Counter.String())
-	} else {
-		return fmt.Sprintf("%s%s %s", prefix, d.Chain, d.Action)
 	}
+	return fmt.Sprintf("%s%s %s", prefix, d.Chain, d.Action)
 }
 
 // Rule represents a rule in an iptables dump. Normally the start with -A.
@@ -144,7 +143,6 @@ func (r Rule) Spec() (ret []string) {
 		} else {
 			ret = append(ret, "!", "-f")
 		}
-
 	}
 	if r.IPv4 {
 		ret = append(ret, "-4")
@@ -154,7 +152,6 @@ func (r Rule) Spec() (ret []string) {
 	}
 	if len(r.Matches) > 0 {
 		for _, m := range r.Matches {
-
 			ret = append(ret, m.Spec()...)
 		}
 	}
@@ -169,8 +166,8 @@ func (r Rule) Spec() (ret []string) {
 
 // EqualTo returns true, if the rules are
 // equal to each other.
-func (r1 Rule) EqualTo(r2 Rule) bool {
-	return reflect.DeepEqual(r1, r2)
+func (r Rule) EqualTo(r2 Rule) bool {
+	return reflect.DeepEqual(r, r2)
 }
 
 // DNSOrIPPair either holds an IP or DNS and a flag.
@@ -187,6 +184,7 @@ func (d DNSOrIPPair) String(f string) string {
 	return strings.Join(d.Spec(f), " ")
 }
 
+// Spec returns a DNSOrIPPair how coreos' iptables package would expect it.
 func (d DNSOrIPPair) Spec(f string) []string {
 	s := []string{"!", f, d.Value.String()}
 	if !d.Not {
@@ -256,6 +254,7 @@ func (sp StringPair) String(f string) string {
 	return strings.Join(sp.Spec(f), " ")
 }
 
+// Spec returns a StringPair how coreos' iptables package would expect it.
 func (sp StringPair) Spec(f string) []string {
 	ret := []string{"!", f, sp.Value}
 	if !sp.Not {
@@ -285,6 +284,7 @@ func (m Match) String() string {
 	return strings.Join(m.Spec(), " ")
 }
 
+// Spec returns a Match how coreos' iptables package would expect it.
 func (m Match) Spec() []string {
 	ret := make([]string, 2, 2+len(m.Flags)*2)
 	ret[0], ret[1] = "-m", m.Type
@@ -305,6 +305,7 @@ func (fl Flag) String(f string) string {
 	return strings.Join(fl.Spec(f), " ")
 }
 
+// Spec returns a Flag how coreos' iptables package would expect it.
 func (fl Flag) Spec(f string) []string {
 	ret := []string{"!", f}
 	ret = append(ret, fl.Values...)
@@ -314,6 +315,7 @@ func (fl Flag) Spec(f string) []string {
 	return ret
 }
 
+// Target represents a Target Extension. See iptables-extensions(8).
 type Target struct {
 	Name  string
 	Flags map[string]Flag
@@ -323,6 +325,7 @@ func (t Target) String(name string) string {
 	return strings.Join(t.Spec(name), " ")
 }
 
+// Spec returns a Target how coreos' iptables package would expect it.
 func (t Target) Spec(f string) []string {
 	ret := make([]string, 2, 2+len(t.Flags)*2)
 	ret[0], ret[1] = f, t.Name
@@ -332,17 +335,17 @@ func (t Target) Spec(f string) []string {
 	return ret
 }
 
-// Max buffer size of the ring buffer in the parser.
-const BUF_SIZE = 10
+// BUFSIZE is the max buffer size of the ring buffer in the parser.
+const BUFSIZE = 16
 
 // Parser represents a parser.
 type Parser struct {
 	s   *scanner
 	buf struct {
-		toks [BUF_SIZE]Token  // token buffer
-		lits [BUF_SIZE]string // literal buffer
-		p    int              // current position in the buffer (max=BUF_SIZE)
-		n    int              // offset (max=BUF_SIZE)
+		toks [BUFSIZE]Token  // token buffer
+		lits [BUFSIZE]string // literal buffer
+		p    int             // current position in the buffer (max=BUF_SIZE)
+		n    int             // offset (max=BUF_SIZE)
 	}
 }
 
@@ -371,7 +374,7 @@ func (p *Parser) Parse() (l Line, err error) {
 	case COLON:
 		return p.parseDefault(p.s.scanLine())
 	case EOF:
-		return nil, io.EOF //ErrEOF
+		return nil, io.EOF // ErrEOF
 	case NEWLINE:
 		return nil, errors.New("empty line")
 	default:
@@ -392,8 +395,10 @@ func (p *Parser) ParseRule() (*Rule, error) {
 	}
 }
 
-var matchModules map[string]struct{}
-var targetExtensions map[string]struct{}
+var (
+	matchModules     map[string]struct{}
+	targetExtensions map[string]struct{}
+)
 
 func init() {
 	matchModules = make(map[string]struct{})
@@ -430,17 +435,17 @@ func (p *Parser) parseDefault(lit string) (Line, error) {
 func parseCounter(bytes []byte) (Counter, error) {
 	var c Counter
 	pc := regCounter.ReplaceAll(bytes, []byte("$1"))
-	if i, err := strconv.ParseUint(string(pc), 10, 0); err != nil {
+	i, err := strconv.ParseUint(string(pc), 10, 0)
+	if err != nil {
 		return c, fmt.Errorf("Could not parse counter: %w", err)
-	} else {
-		c.packets = i
 	}
+	c.packets = i
 	pc = regCounter.ReplaceAll(bytes, []byte("$2"))
-	if i, err := strconv.ParseUint(string(pc), 10, 0); err != nil {
+	i, err = strconv.ParseUint(string(pc), 10, 0)
+	if err != nil {
 		return c, fmt.Errorf("Could not parse counter: %w", err)
-	} else {
-		c.bytes = i
 	}
+	c.bytes = i
 	return c, nil
 }
 
@@ -579,7 +584,6 @@ func (p *Parser) parseRule() (Line, error) {
 			// Avoid scanning the next token, if an error occured.
 			nextValue = nextValue && err == nil
 		}
-
 	}
 	return r, nil
 }
@@ -608,7 +612,7 @@ func (p *Parser) parsePolicy(d bool) (Line, error) {
 		return ret, nil
 	}
 	if tok, lit := p.scanIgnoreWhitespace(); tok != EOF && tok != NEWLINE {
-		return nil, fmt.Errorf("found %q, expected EOF or newline.", lit)
+		return nil, fmt.Errorf("found %q, expected EOF or newline", lit)
 	}
 	return ret, nil
 }
@@ -648,9 +652,8 @@ func (p *Parser) parseStringPair(sp *StringPair, not bool) (state, error) {
 		*sp = StringPair{Value: "", Not: not}
 		p.unscan(1)
 		return sStart, errors.New("unexpected token, expected IDENT")
-	} else {
-		*sp = StringPair{Value: lit, Not: not}
 	}
+	*sp = StringPair{Value: lit, Not: not}
 	return sStart, nil
 }
 
@@ -666,14 +669,14 @@ func (p *Parser) scan() (tok Token, lit string) {
 	// If we have a token on the buffer, return it.
 	if p.buf.n != 0 {
 		p.buf.n--
-		return p.buf.toks[mod(p.buf.p-p.buf.n-1, BUF_SIZE)], p.buf.lits[mod(p.buf.p-p.buf.n-1, BUF_SIZE)]
+		return p.buf.toks[mod(p.buf.p-p.buf.n-1, BUFSIZE)], p.buf.lits[mod(p.buf.p-p.buf.n-1, BUFSIZE)]
 	}
 	// Otherwise read the next token from the scanner.
 	tok, lit = p.s.scan()
 	// Save it to the buffer in case we unscan later.
 	p.buf.toks[p.buf.p], p.buf.lits[p.buf.p] = tok, lit
 	p.buf.p++ // increase the pointer of the ring buffer.
-	p.buf.p %= BUF_SIZE
+	p.buf.p %= BUFSIZE
 	return
 }
 
@@ -689,26 +692,10 @@ func (p *Parser) scanIgnoreWhitespace() (tok Token, lit string) {
 // unscan reverts the pointer on the buffer, callers should not unscan more then what was
 // previously read, or values larger then BUF_SIZE.
 func (p *Parser) unscan(n int) {
-	if p.buf.n+n >= BUF_SIZE {
+	if p.buf.n+n >= BUFSIZE {
 		panic("size exceeds buffer")
 	}
 	p.buf.n += n
-}
-
-func (p *Parser) unscanIgnoreWhitespace(n int) error {
-	for i := 0; i < BUF_SIZE; i++ {
-		if p.buf.toks[p.buf.n] == ILLEGAL {
-			break
-		}
-		if p.buf.toks[p.buf.n] == WS {
-			p.unscan(1)
-		} else {
-			if n--; n == 0 {
-				return nil
-			}
-		}
-	}
-	return errors.New("buffer has no none whitespace characters")
 }
 
 var hasWS *regexp.Regexp = regexp.MustCompile(`\s`)
