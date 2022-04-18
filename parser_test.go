@@ -54,7 +54,6 @@ func TestDNSOrIPPair_Spec(t *testing.T) {
 	} {
 		if res := tc.d.Spec(tc.f); !reflect.DeepEqual(res, tc.r) {
 			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
-
 		}
 	}
 }
@@ -84,7 +83,6 @@ func TestStringPair_Spec(t *testing.T) {
 	} {
 		if res := tc.p.Spec(tc.f); !reflect.DeepEqual(res, tc.r) {
 			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
-
 		}
 	}
 }
@@ -114,7 +112,6 @@ func TestFlag_String(t *testing.T) {
 	} {
 		if res := tc.p.String(tc.f); !reflect.DeepEqual(res, tc.r) {
 			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
-
 		}
 	}
 }
@@ -128,7 +125,7 @@ func TestMatch_String(t *testing.T) {
 			p: Match{
 				Type: "comment",
 				Flags: map[string]Flag{
-					"comment": Flag{
+					"comment": {
 						Values: []string{"hallo"},
 					},
 				},
@@ -139,7 +136,7 @@ func TestMatch_String(t *testing.T) {
 			p: Match{
 				Type: "tcp",
 				Flags: map[string]Flag{
-					"tcp-options": Flag{
+					"tcp-options": {
 						Not:    true,
 						Values: []string{"bla", "blub"},
 					},
@@ -150,7 +147,6 @@ func TestMatch_String(t *testing.T) {
 	} {
 		if res := tc.p.String(); !reflect.DeepEqual(res, tc.r) {
 			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
-
 		}
 	}
 }
@@ -165,7 +161,7 @@ func TestTarget_String(t *testing.T) {
 			p: Target{
 				Name: "foo",
 				Flags: map[string]Flag{
-					"bar": Flag{
+					"bar": {
 						Values: []string{"foo"},
 					},
 				},
@@ -177,7 +173,7 @@ func TestTarget_String(t *testing.T) {
 			p: Target{
 				Name: "foo",
 				Flags: map[string]Flag{
-					"bar": Flag{
+					"bar": {
 						Not:    true,
 						Values: []string{"foo", "bar"},
 					},
@@ -189,7 +185,6 @@ func TestTarget_String(t *testing.T) {
 	} {
 		if res := tc.p.String(tc.f); !reflect.DeepEqual(res, tc.r) {
 			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
-
 		}
 	}
 }
@@ -202,10 +197,12 @@ func TestRule_Spec(t *testing.T) {
 		{
 			rule: Rule{
 				Chain: "foo",
-				Source: &DNSOrIPPair{Value: DNSOrIP{
-					iP: parseCIDR("192.168.178.2"),
+				Source: &DNSOrIPPair{
+					Value: DNSOrIP{
+						iP: parseCIDR("192.168.178.2"),
+					},
+					Not: true,
 				},
-					Not: true},
 				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, Not: true},
 			},
 			res: []string{"!", "-s", "192.168.178.2/32", "!", "-d", "1.1.1.1/32"},
@@ -213,7 +210,6 @@ func TestRule_Spec(t *testing.T) {
 	} {
 		if res := tc.rule.Spec(); !reflect.DeepEqual(res, tc.res) {
 			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.res, res)
-
 		}
 	}
 }
@@ -226,10 +222,12 @@ func TestRule_String(t *testing.T) {
 		{
 			rule: Rule{
 				Chain: "foo",
-				Source: &DNSOrIPPair{Value: DNSOrIP{
-					iP: parseCIDR("192.168.178.2"),
+				Source: &DNSOrIPPair{
+					Value: DNSOrIP{
+						iP: parseCIDR("192.168.178.2"),
+					},
+					Not: true,
 				},
-					Not: true},
 				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, Not: true},
 			},
 			res: "-A foo ! -s 192.168.178.2/32 ! -d 1.1.1.1/32",
@@ -241,14 +239,14 @@ func TestRule_String(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{`kubernetes service traffic requiring SNAT`}},
+							"comment": {Values: []string{`kubernetes service traffic requiring SNAT`}},
 						},
 					},
 				},
 				Jump: &Target{
 					Name: "MASQUERADE",
 					Flags: map[string]Flag{
-						"to-ports": Flag{
+						"to-ports": {
 							Values: []string{"200-1000"},
 						},
 					},
@@ -259,7 +257,6 @@ func TestRule_String(t *testing.T) {
 	} {
 		if res := tc.rule.String(); !reflect.DeepEqual(res, tc.res) {
 			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.res, res)
-
 		}
 	}
 }
@@ -333,7 +330,8 @@ func TestParser_Parse(t *testing.T) {
 				Counter: &Counter{
 					packets: 10,
 					bytes:   100,
-				}},
+				},
+			},
 			err: nil,
 		},
 		{
@@ -345,7 +343,8 @@ func TestParser_Parse(t *testing.T) {
 				Counter: &Counter{
 					packets: 0,
 					bytes:   100,
-				}},
+				},
+			},
 			err: nil,
 		},
 		{
@@ -372,10 +371,12 @@ func TestParser_Parse(t *testing.T) {
 			s:    "-A foo ! -s 192.168.178.2 ! --dst 1.1.1.1",
 			r: Rule{
 				Chain: "foo",
-				Source: &DNSOrIPPair{Value: DNSOrIP{
-					iP: parseCIDR("192.168.178.2"),
+				Source: &DNSOrIPPair{
+					Value: DNSOrIP{
+						iP: parseCIDR("192.168.178.2"),
+					},
+					Not: true,
 				},
-					Not: true},
 				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, Not: true},
 			},
 			err: nil,
@@ -418,7 +419,7 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{
+							"comment": {
 								Values: []string{`this crazy\`},
 							},
 						},
@@ -448,7 +449,7 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{
+							"comment": {
 								Values: []string{`this crazy`},
 							},
 						},
@@ -478,7 +479,7 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{
+							"comment": {
 								Values: []string{`--this-crazy`},
 							},
 						},
@@ -506,7 +507,7 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{
+							"comment": {
 								Values: []string{`this \"crazy\"`},
 							},
 						},
@@ -527,7 +528,7 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{
+							"comment": {
 								Values: []string{`this \"crazy\"`},
 							},
 						},
@@ -560,9 +561,9 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "tcp",
 						Flags: map[string]Flag{
-							"destination-port": Flag{Values: []string{"8080:9000"}},
-							"source-port":      Flag{Values: []string{"1010"}},
-							"tcp-flags":        Flag{Values: []string{"SYN,FIN", "ACK"}},
+							"destination-port": {Values: []string{"8080:9000"}},
+							"source-port":      {Values: []string{"1010"}},
+							"tcp-flags":        {Values: []string{"SYN,FIN", "ACK"}},
 						},
 					},
 				},
@@ -579,12 +580,12 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "tcp",
 						Flags: map[string]Flag{
-							"source-port": Flag{Values: []string{"1010"}},
-							"destination-port": Flag{
+							"source-port": {Values: []string{"1010"}},
+							"destination-port": {
 								Values: []string{"1000"},
 								Not:    true,
 							},
-							"tcp-flags": Flag{Values: []string{"SYN,FIN", "ACK"}},
+							"tcp-flags": {Values: []string{"SYN,FIN", "ACK"}},
 						},
 					},
 				},
@@ -601,17 +602,17 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "tcp",
 						Flags: map[string]Flag{
-							"source-port": Flag{Values: []string{"1010"}},
-							"destination-port": Flag{
+							"source-port": {Values: []string{"1010"}},
+							"destination-port": {
 								Values: []string{"1000:1010"},
 								Not:    true,
 							},
-							"tcp-flags": Flag{Values: []string{"SYN,FIN", "ACK"}},
-							"tcp-option": Flag{
+							"tcp-flags": {Values: []string{"SYN,FIN", "ACK"}},
+							"tcp-option": {
 								Not:    true,
 								Values: []string{"1"},
 							},
-							"syn": Flag{
+							"syn": {
 								Not: true,
 							},
 						},
@@ -630,21 +631,21 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "tcp",
 						Flags: map[string]Flag{
-							"source-port": Flag{
+							"source-port": {
 								Not:    true,
 								Values: []string{"1010"},
 							},
-							"destination-port": Flag{
+							"destination-port": {
 								Values: []string{"1000:1010"},
 							},
-							"tcp-flags": Flag{
+							"tcp-flags": {
 								Not:    true,
 								Values: []string{"SYN,FIN", "ACK"},
 							},
-							"tcp-option": Flag{
+							"tcp-option": {
 								Values: []string{"1"},
 							},
-							"syn": Flag{},
+							"syn": {},
 						},
 					},
 				},
@@ -676,29 +677,29 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "tcp",
 						Flags: map[string]Flag{
-							"source-port": Flag{
+							"source-port": {
 								Not:    true,
 								Values: []string{"1010"},
 							},
-							"destination-port": Flag{
+							"destination-port": {
 								Values: []string{"1000:1010"},
 							},
-							"tcp-flags": Flag{
+							"tcp-flags": {
 								Not:    true,
 								Values: []string{"SYN,FIN", "ACK"},
 							},
-							"tcp-option": Flag{
+							"tcp-option": {
 								Values: []string{"1"},
 							},
-							"syn": Flag{},
+							"syn": {},
 						},
 					},
 				},
 				Jump: &Target{
 					Name: "DNAT",
 					Flags: map[string]Flag{
-						"random": Flag{},
-						"to-destination": Flag{
+						"random": {},
+						"to-destination": {
 							Values: []string{"192.168.1.1-192.168.1.2:80-81"},
 						},
 					},
@@ -718,7 +719,7 @@ func TestParser_Parse(t *testing.T) {
 				Jump: &Target{
 					Name: "SNAT",
 					Flags: map[string]Flag{
-						"to-source": Flag{
+						"to-source": {
 							Values: []string{"192.168.1.1"},
 						},
 					},
@@ -738,10 +739,10 @@ func TestParser_Parse(t *testing.T) {
 				Jump: &Target{
 					Name: "SNAT",
 					Flags: map[string]Flag{
-						"to-source": Flag{
+						"to-source": {
 							Values: []string{"192.168.1.1"},
 						},
-						"random-fully": Flag{},
+						"random-fully": {},
 					},
 				},
 			},
@@ -756,13 +757,13 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{`kubernetes service nodeports; NOTE: this must be the last rule in this chain`}},
+							"comment": {Values: []string{`kubernetes service nodeports; NOTE: this must be the last rule in this chain`}},
 						},
 					},
 					{
 						Type: "addrtype",
 						Flags: map[string]Flag{
-							"dst-type": Flag{
+							"dst-type": {
 								Values: []string{"LOCAL"},
 							},
 						},
@@ -791,13 +792,13 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{`kube-system/kube-dns:dns cluster IP`}},
+							"comment": {Values: []string{`kube-system/kube-dns:dns cluster IP`}},
 						},
 					},
 					{
 						Type: "udp",
 						Flags: map[string]Flag{
-							"destination-port": Flag{
+							"destination-port": {
 								Values: []string{"53"},
 							},
 						},
@@ -818,14 +819,14 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{`kubernetes service traffic requiring SNAT`}},
+							"comment": {Values: []string{`kubernetes service traffic requiring SNAT`}},
 						},
 					},
 				},
 				Jump: &Target{
 					Name: "MASQUERADE",
 					Flags: map[string]Flag{
-						"random-fully": Flag{},
+						"random-fully": {},
 					},
 				},
 			},
@@ -840,16 +841,16 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "comment",
 						Flags: map[string]Flag{
-							"comment": Flag{Values: []string{`kubernetes service traffic requiring SNAT`}},
+							"comment": {Values: []string{`kubernetes service traffic requiring SNAT`}},
 						},
 					},
 				},
 				Jump: &Target{
 					Name: "MASQUERADE",
 					Flags: map[string]Flag{
-						"random-fully": Flag{},
-						"random":       Flag{},
-						"to-ports": Flag{
+						"random-fully": {},
+						"random":       {},
+						"to-ports": {
 							Values: []string{"200-1000"},
 						},
 					},
@@ -862,12 +863,15 @@ func TestParser_Parse(t *testing.T) {
 			s:    "-A foo ! -s 192.168.178.2 ! --dst 1.1.1.1 -m statistic --mode random --probability 0.50000000000 --every 10 --packet 5",
 			r: Rule{
 				Chain: "foo",
-				Source: &DNSOrIPPair{Value: DNSOrIP{
-					iP: parseCIDR("192.168.178.2"),
+				Source: &DNSOrIPPair{
+					Value: DNSOrIP{
+						iP: parseCIDR("192.168.178.2"),
+					},
+					Not: true,
 				},
-					Not: true},
 				Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("1.1.1.1")}, Not: true},
-				Matches: []Match{{Type: "statistic",
+				Matches: []Match{{
+					Type: "statistic",
 					Flags: map[string]Flag{
 						"mode": {
 							Values: []string{`random`},
@@ -881,7 +885,8 @@ func TestParser_Parse(t *testing.T) {
 						"every": {
 							Values: []string{`10`},
 						},
-					}}},
+					},
+				}},
 			},
 			err: nil,
 		},
@@ -894,7 +899,8 @@ func TestParser_Parse(t *testing.T) {
 				Counter: &Counter{
 					packets: 0,
 					bytes:   100,
-				}},
+				},
+			},
 			err: nil,
 		},
 		{
@@ -910,7 +916,7 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "addrtype",
 						Flags: map[string]Flag{
-							"dst-type": Flag{Values: []string{"LOCAL"}},
+							"dst-type": {Values: []string{"LOCAL"}},
 						},
 					},
 				},
@@ -974,7 +980,7 @@ func TestParser_Parse(t *testing.T) {
 					{
 						Type: "tcp",
 						Flags: map[string]Flag{
-							"destination-port": Flag{
+							"destination-port": {
 								Values: []string{"6443"},
 							},
 						},
@@ -1034,7 +1040,8 @@ func TestParser_ParseMore(t *testing.T) {
 					Counter: &Counter{
 						packets: 10,
 						bytes:   100,
-					}},
+					},
+				},
 				Rule{
 					Chain:       "foo",
 					Destination: &DNSOrIPPair{Value: DNSOrIP{iP: parseCIDR("192.168.178.2")}},
@@ -1052,7 +1059,7 @@ func TestParser_ParseMore(t *testing.T) {
 						{
 							Type: "comment",
 							Flags: map[string]Flag{
-								"comment": Flag{
+								"comment": {
 									Values: []string{`this crazy`},
 								},
 							},
@@ -1067,16 +1074,16 @@ func TestParser_ParseMore(t *testing.T) {
 						{
 							Type: "comment",
 							Flags: map[string]Flag{
-								"comment": Flag{Values: []string{"kubernetes service traffic requiring SNAT"}},
+								"comment": {Values: []string{"kubernetes service traffic requiring SNAT"}},
 							},
 						},
 					},
 					Jump: &Target{
 						Name: "MASQUERADE",
 						Flags: map[string]Flag{
-							"random-fully": Flag{},
-							"random":       Flag{},
-							"to-ports": Flag{
+							"random-fully": {},
+							"random":       {},
+							"to-ports": {
 								Values: []string{"200-1000"},
 							},
 						},
@@ -1103,7 +1110,7 @@ func TestParser_ParseMore(t *testing.T) {
 						{
 							Type: "addrtype",
 							Flags: map[string]Flag{
-								"dst-type": Flag{Values: []string{"LOCAL"}},
+								"dst-type": {Values: []string{"LOCAL"}},
 							},
 						},
 					},
@@ -1152,7 +1159,7 @@ func TestParser_ParseMore(t *testing.T) {
 						{
 							Type: "tcp",
 							Flags: map[string]Flag{
-								"destination-port": Flag{
+								"destination-port": {
 									Values: []string{"6443"},
 								},
 							},
