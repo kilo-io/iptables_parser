@@ -28,6 +28,8 @@ func (p *Parser) parseMatch(ms *[]Match) (state, error) {
 		s, err = p.parseUdp(&m.Flags)
 	case "statistic":
 		s, err = p.parseStatistic(&m.Flags)
+	case "multiport":
+		s, err = p.parseMultiport(&m.Flags)
 	default:
 		if _, ok := matchModules[lit]; ok {
 			return sError, fmt.Errorf("match modules %q is not implemented", lit)
@@ -385,6 +387,78 @@ func (p *Parser) parseTcp(f *map[string]Flag) (state, error) {
 	return sStart, nil
 }
 
+func (p *Parser) parseMultiport(f *map[string]Flag) (state, error) {
+	s := sStart
+	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF; tok, lit = p.scanIgnoreWhitespace() {
+		for nextValue := false; !nextValue; {
+			nextValue = true
+			switch s {
+			case sStart:
+				switch tok {
+				case NOT:
+					s = sINotF
+				case FLAG:
+					s = sIF
+					nextValue = false
+				default:
+					return sError, fmt.Errorf("unexpected token %q, expected flag, or \"!\"", lit)
+				}
+			case sINotF:
+				switch {
+				case lit == "--dports" || lit == "--destination-ports":
+					(*f)["destination-ports"] = Flag{
+						Not:    true,
+						Values: p.parsePorts(),
+					}
+					s = sStart
+				case lit == "--sports" || lit == "--source-ports":
+					(*f)["source-ports"] = Flag{
+						Not:    true,
+						Values: p.parsePorts(),
+					}
+					s = sStart
+				case lit == "--ports":
+					(*f)["ports"] = Flag{
+						Not:    true,
+						Values: p.parsePorts(),
+					}
+					s = sStart
+				default:
+					p.unscan(1)
+					return sNot, nil
+				}
+			case sIF:
+				switch {
+				case lit == "--dports" || lit == "--destination-ports":
+					(*f)["destination-ports"] = Flag{
+						Values: p.parsePorts(),
+					}
+					s = sStart
+				case lit == "--sports" || lit == "--source-ports":
+					(*f)["source-ports"] = Flag{
+						Values: p.parsePorts(),
+					}
+					s = sStart
+				case lit == "--ports":
+					(*f)["ports"] = Flag{
+						Not:    true,
+						Values: p.parsePorts(),
+					}
+					s = sStart
+				default:
+					// The end of the match statement is reached.
+					p.unscan(1)
+					return sStart, nil
+				}
+
+			default:
+				return sStart, errors.New("unexpected error parsing match extension")
+			}
+		}
+	}
+	return sStart, nil
+}
+
 func (p *Parser) parsePort() string {
 	_, l := p.scanIgnoreWhitespace()
 	if t, _ := p.scanIgnoreWhitespace(); t == COLON {
@@ -394,6 +468,22 @@ func (p *Parser) parsePort() string {
 		p.unscan(1)
 	}
 	return l
+}
+
+func (p *Parser) parsePorts() []string {
+	var ports []string
+	_, l := p.scanIgnoreWhitespace()
+	ports = append(ports, l)
+	for {
+		if t, _ := p.scanIgnoreWhitespace(); t == COMMA {
+			_, c := p.scan()
+			ports = append(ports, c)
+		} else {
+			p.unscan(1)
+			break
+		}
+	}
+	return ports
 }
 
 func (p *Parser) parseList() (strs []string) {
