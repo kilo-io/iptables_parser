@@ -708,6 +708,37 @@ func TestParser_Parse(t *testing.T) {
 			err: nil,
 		},
 		{
+			name: "parse rule with multiport jump target DNAT",
+			s:    "-A foo  -p tcp -m multiport --dports=25,143,465,587,993,4190 -4  -j DNAT --to-destination 192.168.1.1",
+			r: Rule{
+				Chain: "foo",
+				IPv4:  true,
+				Protocol: &StringPair{
+					Not:   false,
+					Value: "tcp",
+				},
+				Matches: []Match{
+					{
+						Type: "multiport",
+						Flags: map[string]Flag{
+							"destination-ports": {
+								Values: []string{"25", "143", "465", "587", "993", "4190"},
+							},
+						},
+					},
+				},
+				Jump: &Target{
+					Name: "DNAT",
+					Flags: map[string]Flag{
+						"to-destination": {
+							Values: []string{"192.168.1.1"},
+						},
+					},
+				},
+			},
+			err: nil,
+		},
+		{
 			name: "parse rule with jump target SNAT",
 			s:    "-A foo -o eth0 -4 -j SNAT --to-source 192.168.1.1",
 			r: Rule{
