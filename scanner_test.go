@@ -27,6 +27,7 @@ func TestScanner_Scan(t *testing.T) {
 		{s: `"hello \"my\" friend bla\`, tok: COMMENT, lit: "hello \\\"my\\\" friend bla\\"},
 		{s: "hello friend", tok: IDENT, lit: "hello"},
 		{s: "192.168.178.2/24", tok: IDENT, lit: "192.168.178.2/24"},
+		{s: "2001:db8::/64", tok: IDENT, lit: "2001:db8::/64"},
 		{s: "# 192.168.178.2/24", tok: COMMENTLINE, lit: " 192.168.178.2/24"},
 	} {
 		s := newScanner(strings.NewReader(tc.s))
