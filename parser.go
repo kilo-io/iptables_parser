@@ -412,7 +412,7 @@ func init() {
 }
 
 var (
-	regDefault *regexp.Regexp = regexp.MustCompile(`^\s*(\S+)\s+(\S+)\s+(\[\d*\:\d*\])\s*$`)
+	regDefault *regexp.Regexp = regexp.MustCompile(`^\s*(\S+)\s+(\S+)(?:\s+(\[\d*\:\d*\]))?\s*$`)
 	regCounter *regexp.Regexp = regexp.MustCompile(`^\[(\d*)\:(\d*)\]$`)
 )
 
@@ -422,12 +422,17 @@ func (p *Parser) parseDefault(lit string) (Line, error) {
 	a := regDefault.ReplaceAll([]byte(lit), []byte("$2"))
 	r.Action = string(a)
 	cs := regDefault.ReplaceAll([]byte(lit), []byte("$3"))
-	c, err := parseCounter(cs)
-	if err != nil {
-		return nil, err
+	if string(cs) == "" {
+		// nothing has changed
+		// iptables-restore allows the counter to not exist
+		r.Counter = &Counter{}
+	} else {
+		c, err := parseCounter(cs)
+		if err != nil {
+			return nil, err
+		}
+		r.Counter = &c
 	}
-
-	r.Counter = &c
 	return r, nil
 }
 
