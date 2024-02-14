@@ -1211,7 +1211,7 @@ func TestParser_ParseMore(t *testing.T) {
 			},
 		},
 		{
-			name: "Parse some rules from iptables -S",
+			name: "Parse some rules from iptables -S as well as iptables-save",
 			s: `-P INPUT ACCEPT
 			-P FORWARD DROP
 			-P OUTPUT ACCEPT
@@ -1220,7 +1220,8 @@ func TestParser_ParseMore(t *testing.T) {
 			-N DOCKER-ISOLATION-STAGE-2
 			-N DOCKER-USER
 			-A FORWARD -j DOCKER-USER
-			-A FORWARD -j DOCKER-ISOLATION-STAGE-1`,
+			-A FORWARD -j DOCKER-ISOLATION-STAGE-1
+			COMMIT`,
 			r: []interface{}{
 				Policy{
 					UserDefined: &_false,
@@ -1265,6 +1266,7 @@ func TestParser_ParseMore(t *testing.T) {
 						Name: "DOCKER-ISOLATION-STAGE-1",
 					},
 				},
+				Commit{},
 			},
 		},
 	} {
