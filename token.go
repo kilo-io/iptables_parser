@@ -10,6 +10,7 @@ const (
 
 	// Literals
 	IDENT // main
+	COMMIT
 
 	// Misc characters
 	COLON     // :

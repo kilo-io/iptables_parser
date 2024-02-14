@@ -27,7 +27,11 @@ func (s *scanner) scan() (tok Token, lit string) {
 		return s.scanWhitespace()
 	case isLetter(ch) || isDigit(ch):
 		s.unread()
-		return s.scanIdent()
+		tok, lit := s.scanIdent()
+		if lit == "COMMIT" {
+			return COMMIT, "COMMIT"
+		}
+		return tok, lit
 	}
 
 	// Otherwise read the individual character.
