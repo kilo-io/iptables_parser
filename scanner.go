@@ -192,4 +192,4 @@ func isLetter(ch rune) bool { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && c
 // isDigit returns true if the rune is a digit.
 func isDigit(ch rune) bool { return (ch >= '0' && ch <= '9') }
 
-func isMisc(ch rune) bool { return (ch == '.' || ch == '/' || ch == '-') }
+func isMisc(ch rune) bool { return (ch == '.' || ch == '/' || ch == '-' || ch == '_') }
