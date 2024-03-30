@@ -32,6 +32,8 @@ func (p *Parser) parseMatch(ms *[]Match) (state, error) {
 		s, err = p.parseMultiport(&m.Flags)
 	case "icmp":
 		s, err = p.parseIcmp(&m.Flags)
+	case "icmp6":
+		s, err = p.parseIcmp6(&m.Flags)
 	default:
 		if _, ok := matchModules[lit]; ok {
 			return sError, fmt.Errorf("match modules %q is not implemented", lit)
@@ -566,6 +568,57 @@ func (p *Parser) parseIcmp(f *map[string]Flag) (state, error) {
 				case lit == "--icmp-type":
 					_, lit := p.scanIgnoreWhitespace()
 					(*f)["icmp-type"] = Flag{
+						Values: []string{lit},
+					}
+					s = sStart
+				default:
+					// The end of the match statement is reached.
+					p.unscan(1)
+					return sStart, nil
+				}
+
+			default:
+				return sStart, errors.New("unexpected error parsing match extension")
+			}
+		}
+	}
+	return sStart, nil
+}
+
+func (p *Parser) parseIcmp6(f *map[string]Flag) (state, error) {
+	s := sStart
+	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF; tok, lit = p.scanIgnoreWhitespace() {
+		for nextValue := false; !nextValue; {
+			nextValue = true
+			switch s {
+			case sStart:
+				switch tok {
+				case NOT:
+					s = sINotF
+				case FLAG:
+					s = sIF
+					nextValue = false
+				default:
+					return sError, fmt.Errorf("unexpected token %q, expected flag, or \"!\"", lit)
+				}
+			case sINotF:
+				switch {
+				case lit == "--icmpv6-type":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["icmpv6-type"] = Flag{
+						Not:    true,
+						Values: []string{lit},
+					}
+					s = sStart
+				default:
+					p.unscan(1)
+					return sNot, nil
+				}
+			case sIF:
+				switch {
+				case lit == "--icmpv6-type":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["icmpv6-type"] = Flag{
 						Values: []string{lit},
 					}
 					s = sStart
