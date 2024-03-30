@@ -64,6 +64,12 @@ func (d Policy) String() string {
 	return fmt.Sprintf("%s%s %s", prefix, d.Chain, d.Action)
 }
 
+type Commit struct{}
+
+func (c Commit) String() string {
+	return "COMMIT"
+}
+
 // Rule represents a rule in an iptables dump. Normally the start with -A.
 // The parser treats the -A flag like any other flag, thus does not require
 // the -A flag as the leading flag.
@@ -373,6 +379,8 @@ func (p *Parser) Parse() (l Line, err error) {
 		return p.parseRule()
 	case COLON:
 		return p.parseDefault(p.s.scanLine())
+	case COMMIT:
+		return Commit{}, nil
 	case EOF:
 		return nil, io.EOF // ErrEOF
 	case NEWLINE:
