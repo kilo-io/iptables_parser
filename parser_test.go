@@ -348,6 +348,19 @@ func TestParser_Parse(t *testing.T) {
 			err: nil,
 		},
 		{
+			name: "parse default rule without counter",
+			s:    ":hello-chain DROP",
+			r: Policy{
+				Chain:  "hello-chain",
+				Action: "DROP",
+				Counter: &Counter{
+					packets: 0,
+					bytes:   0,
+				},
+			},
+			err: nil,
+		},
+		{
 			name: "parse policy",
 			s:    "-P hello-chain DROP",
 			r: Policy{
