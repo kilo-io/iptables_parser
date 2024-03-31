@@ -27,7 +27,11 @@ func (s *scanner) scan() (tok Token, lit string) {
 		return s.scanWhitespace()
 	case isLetter(ch) || isDigit(ch):
 		s.unread()
-		return s.scanIdent()
+		tok, lit := s.scanIdent()
+		if lit == "COMMIT" {
+			return COMMIT, "COMMIT"
+		}
+		return tok, lit
 	}
 
 	// Otherwise read the individual character.
@@ -192,4 +196,4 @@ func isLetter(ch rune) bool { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && c
 // isDigit returns true if the rune is a digit.
 func isDigit(ch rune) bool { return (ch >= '0' && ch <= '9') }
 
-func isMisc(ch rune) bool { return (ch == '.' || ch == '/' || ch == '-' || ch == ':') }
+func isMisc(ch rune) bool { return (ch == '.' || ch == '/' || ch == '-' || ch == '_' || ch == ':') }

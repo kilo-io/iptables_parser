@@ -29,6 +29,7 @@ func TestScanner_Scan(t *testing.T) {
 		{s: "192.168.178.2/24", tok: IDENT, lit: "192.168.178.2/24"},
 		{s: "2001:db8::/64", tok: IDENT, lit: "2001:db8::/64"},
 		{s: "# 192.168.178.2/24", tok: COMMENTLINE, lit: " 192.168.178.2/24"},
+		{s: "I_test_rule-something", tok: IDENT, lit: "I_test_rule-something"},
 	} {
 		s := newScanner(strings.NewReader(tc.s))
 		tok, lit := s.scan()

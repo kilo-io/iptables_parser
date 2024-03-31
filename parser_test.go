@@ -348,6 +348,19 @@ func TestParser_Parse(t *testing.T) {
 			err: nil,
 		},
 		{
+			name: "parse default rule without counter",
+			s:    ":hello-chain DROP",
+			r: Policy{
+				Chain:  "hello-chain",
+				Action: "DROP",
+				Counter: &Counter{
+					packets: 0,
+					bytes:   0,
+				},
+			},
+			err: nil,
+		},
+		{
 			name: "parse policy",
 			s:    "-P hello-chain DROP",
 			r: Policy{
@@ -586,6 +599,46 @@ func TestParser_Parse(t *testing.T) {
 								Not:    true,
 							},
 							"tcp-flags": {Values: []string{"SYN,FIN", "ACK"}},
+						},
+					},
+				},
+			},
+			err: nil,
+		},
+		{
+			name: "parse rule with icmp type",
+			s:    "-A foo -p icmp -m icmp --icmp-type 11",
+			r: Rule{
+				Chain: "foo",
+				Protocol: &StringPair{
+					Not:   false,
+					Value: "icmp",
+				},
+				Matches: []Match{
+					{
+						Type: "icmp",
+						Flags: map[string]Flag{
+							"icmp-type": {Values: []string{"11"}},
+						},
+					},
+				},
+			},
+			err: nil,
+		},
+		{
+			name: "parse rule with icmp type",
+			s:    "-A foo -p ipv6-icmp -m icmp6 --icmpv6-type 11",
+			r: Rule{
+				Chain: "foo",
+				Protocol: &StringPair{
+					Not:   false,
+					Value: "ipv6-icmp",
+				},
+				Matches: []Match{
+					{
+						Type: "icmp6",
+						Flags: map[string]Flag{
+							"icmpv6-type": {Values: []string{"11"}},
 						},
 					},
 				},
@@ -1211,7 +1264,7 @@ func TestParser_ParseMore(t *testing.T) {
 			},
 		},
 		{
-			name: "Parse some rules from iptables -S",
+			name: "Parse some rules from iptables -S as well as iptables-save",
 			s: `-P INPUT ACCEPT
 			-P FORWARD DROP
 			-P OUTPUT ACCEPT
@@ -1220,7 +1273,8 @@ func TestParser_ParseMore(t *testing.T) {
 			-N DOCKER-ISOLATION-STAGE-2
 			-N DOCKER-USER
 			-A FORWARD -j DOCKER-USER
-			-A FORWARD -j DOCKER-ISOLATION-STAGE-1`,
+			-A FORWARD -j DOCKER-ISOLATION-STAGE-1
+			COMMIT`,
 			r: []interface{}{
 				Policy{
 					UserDefined: &_false,
@@ -1265,6 +1319,7 @@ func TestParser_ParseMore(t *testing.T) {
 						Name: "DOCKER-ISOLATION-STAGE-1",
 					},
 				},
+				Commit{},
 			},
 		},
 	} {

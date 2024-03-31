@@ -64,6 +64,12 @@ func (d Policy) String() string {
 	return fmt.Sprintf("%s%s %s", prefix, d.Chain, d.Action)
 }
 
+type Commit struct{}
+
+func (c Commit) String() string {
+	return "COMMIT"
+}
+
 // Rule represents a rule in an iptables dump. Normally the start with -A.
 // The parser treats the -A flag like any other flag, thus does not require
 // the -A flag as the leading flag.
@@ -373,6 +379,8 @@ func (p *Parser) Parse() (l Line, err error) {
 		return p.parseRule()
 	case COLON:
 		return p.parseDefault(p.s.scanLine())
+	case COMMIT:
+		return Commit{}, nil
 	case EOF:
 		return nil, io.EOF // ErrEOF
 	case NEWLINE:
@@ -412,7 +420,7 @@ func init() {
 }
 
 var (
-	regDefault *regexp.Regexp = regexp.MustCompile(`^\s*(\S+)\s+(\S+)\s+(\[\d*\:\d*\])\s*$`)
+	regDefault *regexp.Regexp = regexp.MustCompile(`^\s*(\S+)\s+(\S+)(?:\s+(\[\d*\:\d*\]))?\s*$`)
 	regCounter *regexp.Regexp = regexp.MustCompile(`^\[(\d*)\:(\d*)\]$`)
 )
 
@@ -422,12 +430,17 @@ func (p *Parser) parseDefault(lit string) (Line, error) {
 	a := regDefault.ReplaceAll([]byte(lit), []byte("$2"))
 	r.Action = string(a)
 	cs := regDefault.ReplaceAll([]byte(lit), []byte("$3"))
-	c, err := parseCounter(cs)
-	if err != nil {
-		return nil, err
+	if string(cs) == "" {
+		// nothing has changed
+		// iptables-restore allows the counter to not exist
+		r.Counter = &Counter{}
+	} else {
+		c, err := parseCounter(cs)
+		if err != nil {
+			return nil, err
+		}
+		r.Counter = &c
 	}
-
-	r.Counter = &c
 	return r, nil
 }
 
