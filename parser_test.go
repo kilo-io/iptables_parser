@@ -606,6 +606,46 @@ func TestParser_Parse(t *testing.T) {
 			err: nil,
 		},
 		{
+			name: "parse rule with icmp type",
+			s:    "-A foo -p icmp -m icmp --icmp-type 11",
+			r: Rule{
+				Chain: "foo",
+				Protocol: &StringPair{
+					Not:   false,
+					Value: "icmp",
+				},
+				Matches: []Match{
+					{
+						Type: "icmp",
+						Flags: map[string]Flag{
+							"icmp-type": {Values: []string{"11"}},
+						},
+					},
+				},
+			},
+			err: nil,
+		},
+		{
+			name: "parse rule with icmp type",
+			s:    "-A foo -p ipv6-icmp -m icmp6 --icmpv6-type 11",
+			r: Rule{
+				Chain: "foo",
+				Protocol: &StringPair{
+					Not:   false,
+					Value: "ipv6-icmp",
+				},
+				Matches: []Match{
+					{
+						Type: "icmp6",
+						Flags: map[string]Flag{
+							"icmpv6-type": {Values: []string{"11"}},
+						},
+					},
+				},
+			},
+			err: nil,
+		},
+		{
 			name: "parse rule with match expression tcp and a lot of flags and overwriting",
 			s:    "-A foo  -m tcp --tcp-flags SYN,FIN ACK --sport 1010 ! --dport=1000:1010  --syn! --syn  ! --tcp-option 1  ! -f ",
 			r: Rule{
