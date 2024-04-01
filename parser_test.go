@@ -2,6 +2,7 @@ package iptables_parser
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"reflect"
@@ -84,6 +85,39 @@ func TestStringPair_Spec(t *testing.T) {
 		if res := tc.p.Spec(tc.f); !reflect.DeepEqual(res, tc.r) {
 			t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.r, res)
 		}
+	}
+}
+
+func TestDNSOrIP_Set(t *testing.T) {
+	for i, tc := range []struct {
+		in  string
+		out []string
+	}{
+		{
+			in:  "10.10.0.0/16",
+			out: []string{"-s", "10.10.0.0/16"},
+		},
+		{
+			in:  "10.10.0.1",
+			out: []string{"-s", "10.10.0.1/32"},
+		},
+		{
+			in:  "10::/64",
+			out: []string{"-s", "10::/64"},
+		},
+		{
+			in:  "10::10",
+			out: []string{"-s", "10::10/128"},
+		},
+	} {
+		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
+			dnsOrIpPair := &DNSOrIPPair{}
+
+			dnsOrIpPair.Value.Set(tc.in)
+			if res := dnsOrIpPair.Spec("-s"); !reflect.DeepEqual(res, tc.out) {
+				t.Errorf("test %d:\n\texp=%q\n\tgot=%q\n", i, tc.out, res)
+			}
+		})
 	}
 }
 
