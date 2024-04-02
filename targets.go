@@ -33,6 +33,8 @@ func (p *Parser) parseTarget(t *Target) (state, error) {
 		s, err = p.parseSNAT(&t.Flags)
 	case "MASQUERADE":
 		s, err = p.parseMASQUERADE(&t.Flags)
+	case "LOG":
+		s, err = p.parseLOG(&t.Flags)
 	default:
 		s = sError
 		err = fmt.Errorf("target %q is not implemented", lit)
@@ -179,6 +181,67 @@ func (p *Parser) parseDNAT(f *map[string]Flag) (state, error) {
 					s = sStart
 				case lit == "--persistent":
 					(*f)["persistent"] = Flag{}
+					s = sStart
+				default:
+					// The end of the match statement is reached.
+					p.unscan(1)
+					return sStart, nil
+				}
+
+			default:
+				return sStart, errors.New("unexpected error parsing match extension")
+			}
+		}
+	}
+	p.unscan(1) // unscan the last rune, so main parser can interprete it
+	return sStart, nil
+}
+
+func (p *Parser) parseLOG(f *map[string]Flag) (state, error) {
+	s := sStart
+	for tok, lit := p.scanIgnoreWhitespace(); tok != EOF && tok != NEWLINE; tok, lit = p.scanIgnoreWhitespace() {
+		nextValue := false
+		for !nextValue {
+			nextValue = true
+			switch s {
+			case sStart:
+				switch tok {
+				case FLAG:
+					s = sIF
+					nextValue = false
+				default:
+					// No more flags
+					p.unscan(1)
+					return sStart, nil
+				}
+			case sIF:
+				switch {
+				case lit == "--log-prefix":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["log-prefix"] = Flag{
+						Values: []string{lit},
+					}
+					s = sStart
+				case lit == "--log-level":
+					_, lit := p.scanIgnoreWhitespace()
+					(*f)["log-level"] = Flag{
+						Values: []string{lit},
+					}
+					s = sStart
+				case lit == "--log-tcp-sequence":
+					(*f)["log-tcp-sequence"] = Flag{}
+					s = sStart
+				case lit == "--log-tcp-options":
+					(*f)["log-tcp-options"] = Flag{}
+					s = sStart
+				case lit == "--log-ip-options":
+					(*f)["log-ip-options"] = Flag{}
+					s = sStart
+				case lit == "--log-macdecode":
+					(*f)["log-macdecode"] = Flag{}
+					s = sStart
+				case lit == "--log-uid":
+					(*f)["log-uid"] = Flag{}
 					s = sStart
 				default:
 					// The end of the match statement is reached.
