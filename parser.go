@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -123,7 +124,7 @@ func (r Rule) String() (s string) {
 
 // Spec returns the rule specifications of the rule.
 // The rulespec does not contain the chain name.
-// Different rule specs can descibe the same rule, so
+// Different rule specs can describe the same rule, so
 // don't use the rulespec to compare rules.
 // The rule spec can be used to append, insert or delete
 // rules with coreos' go-iptables module.
@@ -216,7 +217,13 @@ func (d *DNSOrIP) Set(s string) error {
 	sn := s
 	// TODO: this can probably be done in a nicer way.
 	if !strings.Contains(sn, "/") {
-		sn = sn + "/32"
+		if addr, err := netip.ParseAddr(sn); err == nil {
+			if addr.Is4() {
+				sn = sn + "/32"
+			} else {
+				sn = sn + "/128"
+			}
+		}
 	}
 	if _, ipnet, err := net.ParseCIDR(sn); err == nil {
 		d.iP = *ipnet

@@ -8,15 +8,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@main
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.16'
+          go-version: '1.18'
       - run: go test ./...
   fmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@main
-      - uses: actions/setup-go@v1
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.16'
+          go-version: '1.18'
       - run: '[ -z "$(gofmt -e -d ./)" ]'
