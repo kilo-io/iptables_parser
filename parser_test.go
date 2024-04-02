@@ -1089,6 +1089,26 @@ func TestParser_Parse(t *testing.T) {
 			},
 			err: nil,
 		},
+		{
+			name: "parse log",
+			s:    "-A foo -j LOG --log-prefix \"foo\" --log-level emerg --log-tcp-sequence --log-tcp-options --log-ip-options --log-uid --log-macdecode",
+			r: Rule{
+				Chain: "foo",
+				Jump: &Target{
+					Name: "LOG",
+					Flags: map[string]Flag{
+						"log-prefix":       {Values: []string{"foo"}},
+						"log-level":        {Values: []string{"emerg"}},
+						"log-tcp-sequence": {},
+						"log-tcp-options":  {},
+						"log-ip-options":   {},
+						"log-uid":          {},
+						"log-macdecode":    {},
+					},
+				},
+			},
+			err: nil,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := NewParser(strings.NewReader(tc.s))
