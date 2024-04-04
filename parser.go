@@ -115,7 +115,7 @@ func NewFromString(s string) (Line, error) {
 // Note: Don't use this functions to compare rules because the order of flags can be
 // different and different flags can have equal meanings.
 func (r Rule) String() (s string) {
-	s = fmt.Sprintf("-A %s %s", r.Chain, strings.Join(enquoteIfWS(r.Spec()), " "))
+	s = fmt.Sprintf("-A %s %s", enquoteIfWS(r.Chain)[0], strings.Join(enquoteIfWS(r.Spec()...), " "))
 	if r.Counter != nil {
 		s = fmt.Sprintf("%s %s", r.Counter.String(), s)
 	}
@@ -432,6 +432,9 @@ var (
 )
 
 func (p *Parser) parseDefault(lit string) (Line, error) {
+	if len(strings.TrimSpace(lit)) == 0 {
+		return nil, fmt.Errorf("nothing to parse in %q", lit)
+	}
 	var r Policy
 	r.Chain = string(regDefault.ReplaceAll([]byte(lit), []byte("$1")))
 	a := regDefault.ReplaceAll([]byte(lit), []byte("$2"))
@@ -720,7 +723,7 @@ func (p *Parser) unscan(n int) {
 
 var hasWS *regexp.Regexp = regexp.MustCompile(`\s`)
 
-func enquoteIfWS(s []string) []string {
+func enquoteIfWS(s ...string) []string {
 	ret := make([]string, len(s))
 	for i, e := range s {
 		if hasWS.MatchString(e) {
