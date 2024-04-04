@@ -1394,3 +1394,33 @@ func TestParser_ParseMore(t *testing.T) {
 		}
 	}
 }
+
+func FuzzParser_Parse(f *testing.F) {
+	f.Add(":hello ACCEPT [10:100]")
+	f.Fuzz(func(t *testing.T, input string) {
+		p := NewParser(strings.NewReader(input))
+		for s, err := p.Parse(); err != io.EOF; s, err = p.Parse() {
+			if err == nil && s == nil {
+				t.Fatal("no error; no output")
+			}
+			if err != nil && s != nil {
+				t.Fatal("error and output")
+			}
+			if err != nil {
+				t.Skip()
+			}
+			{
+				p := NewParser(strings.NewReader(s.String()))
+				s2, err2 := p.Parse()
+				if err2 != nil {
+					t.Fatal(err2.Error())
+				}
+				if !reflect.DeepEqual(s, s2) {
+					t.Logf("failed for %q", input)
+					t.Errorf("%q != %q", s.String(), s2.String())
+				}
+
+			}
+		}
+	})
+}

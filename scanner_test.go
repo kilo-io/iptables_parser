@@ -1,6 +1,7 @@
 package iptables_parser
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -31,13 +32,15 @@ func TestScanner_Scan(t *testing.T) {
 		{s: "# 192.168.178.2/24", tok: COMMENTLINE, lit: " 192.168.178.2/24"},
 		{s: "I_test_rule-something", tok: IDENT, lit: "I_test_rule-something"},
 	} {
-		s := newScanner(strings.NewReader(tc.s))
-		tok, lit := s.scan()
-		if tc.tok != tok {
-			t.Errorf("%d. %q token mismatch: exp=%q got=%q <%q>", i, tc.s, tc.tok, tok, lit)
-		} else if tc.lit != lit {
-			t.Errorf("%d. %q literal mismatch: exp=%q got=%q", i, tc.s, tc.lit, lit)
-		}
+		t.Run(fmt.Sprintf("%d. %q", i, tc.s), func(t *testing.T) {
+			s := newScanner(strings.NewReader(tc.s))
+			tok, lit := s.scan()
+			if tc.tok != tok {
+				t.Errorf("%q token mismatch: exp=%q got=%q <%q>", tc.s, tc.tok, tok, lit)
+			} else if tc.lit != lit {
+				t.Errorf("%q literal mismatch: exp=%q got=%q", tc.s, tc.lit, lit)
+			}
+		})
 	}
 }
 
